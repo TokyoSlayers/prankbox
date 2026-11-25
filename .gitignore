@@ -1,0 +1,10 @@
+__pycache__/
+*.maj
+*.rar
+prankbox_config.json
+captures/
+
+# Contenus de tiers : restent en local, jamais dans le dépôt public
+images/poro/
+images/poro_oiia/
+sounds/
