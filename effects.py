@@ -31,8 +31,6 @@ from dataclasses import dataclass
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOUNDS_DIR = os.path.join(HERE, "sounds")
 IMAGES_DIR = os.path.join(HERE, "images")
-MAX_ATTACHMENT = 2 * 1024 * 1024  # limite des pièces jointes sur ntfy.sh
-
 GAME_BG = "#0f1923"
 GAME_RED = "#ff4655"
 GAME_WHITE = "#ece8e1"
@@ -526,34 +524,6 @@ def set_volume(percent):
     winmm.waveOutSetVolume(None, (level << 16) | level)
 
 
-# ------------------------------------------------------------------- Capture
-
-CAPTURE_PS = r"""
-Add-Type -Name D -Namespace W -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();'
-[W.D]::SetProcessDPIAware() | Out-Null
-Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-$b = [System.Windows.Forms.SystemInformation]::VirtualScreen
-$bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
-$bmp.Save($env:PRANKBOX_CAPTURE, [System.Drawing.Imaging.ImageFormat]::Jpeg)
-"""
-
-
-def take_screenshot():
-    fd, path = tempfile.mkstemp(suffix=".jpg")
-    os.close(fd)
-    try:
-        subprocess.run(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", CAPTURE_PS],
-            env={**os.environ, "PRANKBOX_CAPTURE": path},
-            creationflags=subprocess.CREATE_NO_WINDOW, timeout=30, check=True)
-        with open(path, "rb") as f:
-            return f.read()
-    finally:
-        os.remove(path)
-
-
 # ------------------------------------------------------------------- Effets
 
 @dataclass
@@ -585,13 +555,11 @@ class Effects:
     """Joue les effets sur ce PC.
 
     on_status(texte) : affiche une info (dernière farce reçue, erreur…).
-    send_capture(jpg, demandeur) : renvoie une capture d'écran à celui qui l'a demandée.
     """
 
-    def __init__(self, root, on_status, send_capture):
+    def __init__(self, root, on_status):
         self.root = root
         self.on_status = on_status
-        self.send_capture = send_capture
         self.events = queue.Queue()
         self.mag = Magnifier()
         mode = current_display_mode()
@@ -1062,27 +1030,6 @@ class Effects:
 
     def fx_minimiser(self, a):
         press_combo(VK_LWIN, VK_D)
-
-    def fx_capture(self, a):
-        requester = a.get("_from")
-
-        def worker():
-            try:
-                jpg = take_screenshot()
-                if len(jpg) > MAX_ATTACHMENT:
-                    raise OSError("image trop lourde pour le relais (2 Mo max)")
-                self.send_capture(jpg, requester)
-                self.events.put(("ui", self._capture_flash))
-            except (OSError, subprocess.SubprocessError) as exc:
-                message = f"Capture impossible : {exc}"
-                self.events.put(("ui", lambda: self.on_status(message)))
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _capture_flash(self):
-        ov = self.fullscreen("white", alpha=0.8, focus=False)
-        play_sound("declic")
-        self.root.after(150, self.close, ov.win)
 
     def fx_touche(self, a):
         key = resolve_key(str(a.get("key", "")))

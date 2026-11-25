@@ -4,12 +4,12 @@ Tout le monde lance ce même programme. Celui qui crée le salon est l'hôte :
 les farces passent par son PC, et il peut exclure ou promouvoir des chefs.
 On ne partage que le code : l'adresse du PC n'est jamais affichée ni copiée.
 Les messages sont chiffrés avec le code du salon.
+Deux versions différentes ne peuvent pas rester dans le même salon.
 
 Usage : python prankbox.py (se met à jour tout seul depuis GitHub au lancement)
 Arrêt d'urgence des effets reçus : Ctrl+Alt+Shift+X
 """
 
-import base64
 import hashlib
 import hmac
 import json
@@ -33,7 +33,6 @@ import updater
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIRECTORY = "https://ntfy.sh"  # annuaire seulement : une adresse chiffrée, jamais les farces
-CAPTURES_DIR = os.path.join(HERE, "captures")
 CONFIG_PATH = os.path.join(HERE, "prankbox_config.json")
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # sans 0/O ni 1/I/L pour éviter les confusions
 
@@ -61,7 +60,7 @@ SCREEN_EFFECTS = [
 ]
 GAME_EFFECTS = [
     ("Faux lag", "faux_lag"), ("Déconnexion", "deconnexion"), ("AFK alerte", "afk"),
-    ("Partie trouvée", "partie_trouvee"), ("Minimiser", "minimiser"), ("Capture", "capture"),
+    ("Partie trouvée", "partie_trouvee"), ("Minimiser", "minimiser"),
 ]
 CHAOS_EFFECTS = [
     ("Écran mort", "ecran_mort"), ("Rotation 90°", "rotation90"), ("Curseur fou", "curseur_fou"),
@@ -96,6 +95,8 @@ RANDOM_POOL = [cmd for _, cmd in
 # ------------------------------------------------------------------- Réseau
 
 HOST_PORT = 47777
+# À augmenter quand le protocole change. Le salon refuse toute autre valeur.
+PROTOCOL = 4
 MAX_FRAME = 4_000_000
 ROLE_LABEL = {"hote": "hôte", "chef": "chef", "membre": "membre"}
 PAGES = [
@@ -581,7 +582,8 @@ class Peer:
     """Salon hébergé par le PC qui l'a créé. Les autres s'y connectent directement.
 
     L'hôte relaie les farces. Les chefs (l'hôte, et ceux qu'il promeut) peuvent
-    exclure un membre ou en promouvoir un autre. Le trafic s'arrête si l'hôte ferme.
+    exclure un membre, en promouvoir un autre et régler le délai entre deux farces.
+    Seul l'hôte retire le rôle de chef. Le trafic s'arrête si l'hôte ferme.
     """
 
     def __init__(self, events):
@@ -598,6 +600,11 @@ class Peer:
         self.link = None
         self.clients = {}  # id -> _Link, côté hôte
         self.banned = set()
+        self.cooldown = 0  # secondes entre deux farces, 0 = aucun délai
+        self.last_cmd = {}  # id -> instant du dernier envoi
+        self.blocked_until = {}  # id -> instant jusqu'auquel l'hôte a refusé
+        self._joined = threading.Event()
+        self._refused = None
         self.addresses = []
         self.udp = None
         self._announcing = False
@@ -742,24 +749,35 @@ class Peer:
                     continue
                 if self._attach(sock):
                     return True
+                if self._refused == "version":
+                    self.room = self.role = None
+                    return False
         pipe = self._punch(public)
         if pipe is not None and self._attach(pipe):
             return True
         self.room = self.role = None
-        self.events.put(("status", "Hôte injoignable. Il doit laisser PrankBox ouvert."))
+        if self._refused != "version":
+            self.events.put(("status", "Hôte injoignable. Il doit laisser PrankBox ouvert."))
         return False
 
     def _attach(self, sock):
         sock.settimeout(None)
         link = _Link(sock)
         self.link = link
+        self._joined.clear()
+        self._refused = None
         try:
-            _write_msg(link, self.key, {"type": "hello", "id": self.id, "name": self.name})
+            _write_msg(link, self.key, {"type": "hello", "id": self.id, "name": self.name, "v": PROTOCOL})
         except OSError:
             self.link = None
             sock.close()
             return False
         threading.Thread(target=self._listen, args=(link,), daemon=True).start()
+        if not self._joined.wait(8) or self.link is not link or self._refused:
+            if self.link is link:
+                self.link = None
+                sock.close()
+            return False
         self.events.put(("status", "Connecté au salon"))
         return True
 
@@ -817,6 +835,11 @@ class Peer:
             self.clients.clear()
             self.members.clear()
             self.banned.clear()
+            self.last_cmd.clear()
+            self.blocked_until.clear()
+            self.cooldown = 0
+            self._refused = None
+        self._joined.set()
         for client in clients:
             try:
                 _write_msg(client, self.key, {"type": "closed", "id": self.id, "name": self.name})
@@ -851,6 +874,11 @@ class Peer:
             return self.members.get(member_id, {}).get("name", "?")
 
     def send_cmd(self, cmd, args, label, targets):
+        if cmd != "stop":
+            left = self._mark_send(self.id)
+            if left > 0:
+                self.events.put(("status", f"Attends {max(1, round(left))} s avant la prochaine farce"))
+                return None
         with self.lock:
             known = set(self.members)
             count = len(known) if targets is None else len(targets & known)
@@ -859,9 +887,12 @@ class Peer:
                     skip=self.id)
         return count
 
-    def send_file(self, data, to):
-        self._relay({"type": "capture", "to": to, "data": base64.b64encode(data).decode(),
-                     "id": self.id, "name": self.name}, skip=self.id, only=to)
+    def set_cooldown(self, seconds):
+        if self.role == "hote":
+            self._set_cooldown(self.id, seconds)
+        elif self.role == "chef" and self.link is not None:
+            self._send(self.link, {"type": "cooldown", "seconds": int(seconds),
+                                   "id": self.id, "name": self.name})
 
     def admin(self, action, target):
         if self.role == "hote":
@@ -876,8 +907,6 @@ class Peer:
                 links = [link for mid, link in self.clients.items() if mid != skip and (only in (None, mid))]
             for link in links:
                 self._send(link, payload)
-            if only in (None, self.id) and payload.get("type") == "capture" and payload.get("to") == self.id:
-                self._capture(payload)
         elif self.link is not None:
             self._send(self.link, payload)
 
@@ -915,6 +944,15 @@ class Peer:
                 pass
             sock.close()
             return
+        if hello.get("v") != PROTOCOL:
+            try:
+                _write_msg(link, self.key, {"type": "version", "v": PROTOCOL,
+                                            "id": self.id, "name": self.name})
+            except OSError:
+                pass
+            sock.close()
+            self.events.put(("log", f"{name} n'a pas la même version : connexion refusée"))
+            return
         with self.lock:
             self.clients[member] = link
             self.members[member] = {"name": name, "role": "membre"}
@@ -942,32 +980,64 @@ class Peer:
         kind = msg.get("type")
         if kind == "bye":
             raise OSError("bye")
-        if kind in ("kick", "promote"):
+        if kind in ("kick", "promote", "demote"):
             self._admin(member, kind, str(msg.get("target", ""))[:16])
+        elif kind == "cooldown":
+            self._set_cooldown(member, msg.get("seconds", 0))
         elif kind == "cmd":
             clean = self._clean_cmd(msg)
-            if clean:
-                self._relay(clean, skip=member)
-                self.events.put(("cmd", clean))
-        elif kind == "capture" and msg.get("to"):
-            self._relay(msg, skip=member, only=str(msg.get("to"))[:16])
+            if not clean:
+                return
+            if clean["cmd"] != "stop":
+                left = self._mark_send(member)
+                if left > 0:
+                    with self.lock:
+                        link = self.clients.get(member)
+                    if link:
+                        self._send(link, {"type": "wait", "left": max(1, round(left)),
+                                          "id": self.id, "name": self.name})
+                    return
+            self._relay(clean, skip=member)
+            self.events.put(("cmd", clean))
 
     def _listen(self, link):
         try:
             while self.link is link:
                 msg = _read_msg(link, self.key)
                 kind = msg.get("type")
+                if kind == "version" or (kind == "members" and msg.get("v") != PROTOCOL):
+                    self._refused = "version"
+                    self._joined.set()
+                    self.events.put(("status", "Versions différentes. Tout le salon doit avoir la même mise à jour : relance PrankBox."))
+                    self.events.put(("log", "Connexion refusée : pas la même version que l'hôte"))
+                    break
                 if kind == "members":
+                    if not self._joined.is_set():
+                        self._joined.set()
+                    raw = msg.get("cooldown")
+                    if isinstance(raw, int):
+                        with self.lock:
+                            self.cooldown = max(0, min(120, raw))
+                        self.events.put(("cooldown", self.cooldown))
                     role = msg.get("role")
                     if role in ROLE_LABEL and role != self.role:
+                        previous = self.role
                         self.role = role
                         if role == "chef":
-                            self.events.put(("log", "Tu es maintenant chef : tu peux exclure et promouvoir"))
+                            self.events.put(("log", "Tu es maintenant chef : tu peux exclure, promouvoir et régler le délai"))
+                        elif previous == "chef":
+                            self.events.put(("log", "Tu n'es plus chef"))
                     self._apply_roster(msg.get("members") or [])
                 elif kind == "cmd":
                     self.events.put(("cmd", msg))
-                elif kind == "capture" and msg.get("to") == self.id:
-                    self._capture(msg)
+                elif kind == "wait":
+                    try:
+                        left = max(1, int(msg.get("left", 1)))
+                    except (TypeError, ValueError):
+                        left = 1
+                    with self.lock:
+                        self.blocked_until[self.id] = time.time() + left
+                    self.events.put(("status", f"Attends {left} s avant la prochaine farce"))
                 elif kind == "kicked":
                     self.events.put(("status", "Tu as été exclu du salon"))
                     self.events.put(("log", "Un chef t'a exclu"))
@@ -1009,10 +1079,46 @@ class Peer:
                     self.members[target]["role"] = "chef"
             self.events.put(("log", f"{target_info['name']} est maintenant chef"))
             self._broadcast_members()
+        elif action == "demote" and actor_role == "hote" and target_info["role"] == "chef":
+            with self.lock:
+                if target in self.members:
+                    self.members[target]["role"] = "membre"
+            self.events.put(("log", f"{target_info['name']} n'est plus chef"))
+            self._broadcast_members()
+
+    def _set_cooldown(self, actor, seconds):
+        try:
+            seconds = int(seconds)
+        except (TypeError, ValueError):
+            return
+        seconds = max(0, min(120, seconds))
+        with self.lock:
+            actor_role = "hote" if actor == self.id else self.members.get(actor, {}).get("role")
+            if actor_role not in ("hote", "chef"):
+                return
+            self.cooldown = seconds
+        text = "aucun" if seconds == 0 else f"{seconds} s"
+        self.events.put(("log", f"Délai entre deux farces : {text}"))
+        self.events.put(("cooldown", seconds))
+        self._broadcast_members()
+
+    def _mark_send(self, member):
+        """0 si la farce peut partir, sinon les secondes qu'il reste à attendre."""
+        with self.lock:
+            now = time.time()
+            wait = self.cooldown
+            left = max(self.blocked_until.get(member, 0) - now,
+                       wait - (now - self.last_cmd.get(member, 0)) if wait > 0 else 0)
+            if left > 0:
+                return left
+            self.last_cmd[member] = now
+            self.blocked_until.pop(member, None)
+            return 0
 
     def _broadcast_members(self):
         with self.lock:
             clients = list(self.clients)
+            cooldown = self.cooldown
             roster = [{"id": self.id, "name": self.name, "role": "hote"}] + [
                 {"id": mid, "name": m["name"], "role": m["role"]} for mid, m in self.members.items()]
         self.events.put(("members", None))
@@ -1024,7 +1130,7 @@ class Peer:
                     role = self.members.get(mid, {}).get("role", "membre")
                 visible = [person for person in roster if person["id"] != mid]
                 self._send(link, {"type": "members", "members": visible, "role": role,
-                                  "id": self.id, "name": self.name})
+                                  "cooldown": cooldown, "v": PROTOCOL, "id": self.id, "name": self.name})
 
     def _apply_roster(self, roster):
         with self.lock:
@@ -1044,23 +1150,6 @@ class Peer:
         return {"type": "cmd", "cmd": cmd[:32], "args": msg.get("args") if isinstance(msg.get("args"), dict) else {},
                 "label": str(msg.get("label") or cmd)[:48], "targets": targets,
                 "id": str(msg.get("id", ""))[:16], "name": str(msg.get("name") or "?")[:32]}
-
-    def _capture(self, msg):
-        try:
-            data = base64.b64decode(msg.get("data", ""), validate=True)
-        except ValueError:
-            return
-        save_capture(self.events, str(msg.get("name") or "?")[:32], data)
-
-
-def save_capture(events, name, data):
-    os.makedirs(CAPTURES_DIR, exist_ok=True)
-    safe = "".join(ch for ch in name if ch.isalnum() or ch in "-_") or "pc"
-    path = os.path.join(CAPTURES_DIR, f"{safe}_{time.strftime('%Y%m%d_%H%M%S')}.jpg")
-    with open(path, "wb") as f:
-        f.write(data)
-    events.put(("capture", (name, path)))
-
 
 # ------------------------------------------------------------------ Interface
 
@@ -1092,10 +1181,11 @@ class PrankBoxApp:
         self.include_me = tk.BooleanVar(value=False)
         self.blocked = tk.BooleanVar(value=False)
         self.volume_var = tk.IntVar(value=config.get("volume", 80))
+        self.cooldown_var = tk.StringVar(value="Délai entre farces : aucun")
         self._hosting = bool(config.get("host"))
         self._guest = bool(config.get("guest"))
         self.peer = Peer(self.events)
-        self.effects = effects.Effects(root, self.received_var.set, self.send_capture)
+        self.effects = effects.Effects(root, self.received_var.set)
         self.effects.set_volume(self.volume_var.get())
         self._build_ui()
         root.protocol("WM_DELETE_WINDOW", self.shutdown)
@@ -1177,6 +1267,30 @@ class PrankBoxApp:
     def promote_selected(self):
         self._admin_selected("promote", "promouvoir")
 
+    def demote_selected(self):
+        if self.peer.role != "hote":
+            self.status_var.set("Seul l'hôte peut retirer un chef")
+            return
+        targets = self.selected_targets()
+        roles = {mid: role for mid, _name, role in self.peer.snapshot()}
+        chefs = [target for target in (targets or ()) if roles.get(target) == "chef"]
+        if not chefs:
+            self.status_var.set("Sélectionne un chef à retirer")
+            return
+        for target in chefs:
+            self.peer.admin("demote", target)
+
+    def apply_cooldown(self):
+        if self.peer.role not in ("hote", "chef"):
+            self.status_var.set("Seul un chef peut régler le délai")
+            return
+        try:
+            seconds = int(self.cooldown_spin.get())
+        except ValueError:
+            self.status_var.set("Le délai doit être un nombre de secondes")
+            return
+        self.peer.set_cooldown(max(0, min(120, seconds)))
+
     def _admin_selected(self, action, verb):
         if self.peer.role not in ("hote", "chef"):
             self.status_var.set("Seul un chef peut faire ça")
@@ -1227,6 +1341,8 @@ class PrankBoxApp:
                  font=("Segoe UI Black", 18)).pack(anchor="w")
         tk.Label(brand, text="Trollez-vous entre potes", bg=SIDEBAR, fg=MUTED,
                  font=("Segoe UI", 9)).pack(anchor="w")
+        tk.Label(brand, text=f"Version {PROTOCOL}", bg=SIDEBAR, fg=MUTED,
+                 font=("Segoe UI", 8)).pack(anchor="w")
         self.nav_box = tk.Frame(self.sidebar, bg=SIDEBAR)
         self.nav_box.pack(fill="both", expand=True, padx=10, pady=8)
         self.nav_buttons = {}
@@ -1463,29 +1579,39 @@ class PrankBoxApp:
         tk.Label(card, text="👑 = chef. Aucune sélection = tout le monde sauf toi.",
                  bg=CARD, fg=MUTED, font=("Segoe UI Emoji", 8), justify="left").grid(
             row=7, column=0, columnspan=6, sticky="w", padx=4)
+        tk.Label(card, textvariable=self.cooldown_var, bg=CARD, fg=MUTED,
+                 font=("Segoe UI", 9)).grid(row=8, column=0, columnspan=3, sticky="w", padx=4, pady=(8, 0))
+        self.cooldown_spin = tk.Spinbox(card, from_=0, to=120, width=5, bg=INPUT_BG, fg=TEXT,
+                                        buttonbackground=DARK_BTN, insertbackground=TEXT, relief="flat",
+                                        font=("Segoe UI", 11))
+        self.cooldown_spin.grid(row=8, column=3, sticky="ew", padx=4, pady=(8, 0), ipady=2)
+        make_button(card, "Appliquer", self.apply_cooldown, bg=DARK_BTN, hover=DARK_BTN_HOVER,
+                    fg=TEXT, size=9).grid(row=8, column=4, columnspan=2, sticky="ew", padx=4, pady=(8, 0))
         make_button(card, "Exclure", self.exclude_selected, bg=RED, hover=RED_HOVER, fg=TEXT, size=9).grid(
-            row=8, column=0, sticky="ew", padx=4, pady=4)
+            row=9, column=0, sticky="ew", padx=4, pady=4)
         make_button(card, "Promouvoir chef", self.promote_selected, bg=DARK_BTN, hover=DARK_BTN_HOVER,
-                    fg=TEXT, size=9).grid(row=8, column=1, columnspan=5, sticky="ew", padx=4, pady=4)
+                    fg=TEXT, size=9).grid(row=9, column=1, columnspan=3, sticky="ew", padx=4, pady=4)
+        make_button(card, "Retirer chef", self.demote_selected, bg=DARK_BTN, hover=DARK_BTN_HOVER,
+                    fg=TEXT, size=9).grid(row=9, column=4, columnspan=2, sticky="ew", padx=4, pady=4)
         for row, (text, var) in enumerate((("M'inclure aussi (pour tester)", self.include_me),
-                                           ("Bloquer les farces qu'on m'envoie", self.blocked)), start=9):
+                                           ("Bloquer les farces qu'on m'envoie", self.blocked)), start=10):
             tk.Checkbutton(card, text=text, variable=var, bg=CARD, fg=TEXT, selectcolor=INPUT_BG,
                            activebackground=CARD, activeforeground=TEXT, font=("Segoe UI", 9)).grid(
                 row=row, column=0, columnspan=6, sticky="w")
         tk.Label(card, text="Volume des farces reçues (0 = muet)", bg=CARD, fg=MUTED,
-                 font=("Segoe UI", 9)).grid(row=11, column=0, columnspan=6, sticky="w", padx=4, pady=(8, 0))
+                 font=("Segoe UI", 9)).grid(row=12, column=0, columnspan=6, sticky="w", padx=4, pady=(8, 0))
         tk.Scale(card, from_=0, to=100, orient="horizontal", variable=self.volume_var, command=self.on_volume,
                  bg=CARD, fg=TEXT, troughcolor=INPUT_BG, activebackground=ORANGE, highlightthickness=0,
                  bd=0, sliderrelief="flat", font=("Segoe UI", 8)).grid(
-            row=12, column=0, columnspan=5, sticky="ew", padx=4)
+            row=13, column=0, columnspan=5, sticky="ew", padx=4)
         make_button(card, "Tester", self.test_volume, bg=DARK_BTN, hover=DARK_BTN_HOVER, fg=TEXT,
-                    size=9).grid(row=12, column=5, sticky="ew", padx=4, pady=(4, 0))
+                    size=9).grid(row=13, column=5, sticky="ew", padx=4, pady=(4, 0))
         tk.Label(card, textvariable=self.received_var, bg=CARD, fg=ORANGE, font=("Segoe UI", 9, "bold"),
-                 wraplength=640, justify="left").grid(row=13, column=0, columnspan=6, sticky="ew", padx=4,
+                 wraplength=640, justify="left").grid(row=14, column=0, columnspan=6, sticky="ew", padx=4,
                                                       pady=(4, 0))
         make_button(card, "STOP — annuler les effets chez tout le monde", self.stop_all,
                     bg=RED, hover=RED_HOVER, fg=TEXT).grid(
-            row=14, column=0, columnspan=6, sticky="ew", padx=4, pady=(8, 0))
+            row=15, column=0, columnspan=6, sticky="ew", padx=4, pady=(8, 0))
 
     # ---------- actions
 
@@ -1516,6 +1642,8 @@ class PrankBoxApp:
             self.log("Rejoins d'abord un salon")
             return
         count = self.peer.send_cmd(cmd, args, label, targets)
+        if count is None:
+            return
         who = "tout le monde" if targets is None else ", ".join(self.peer.name_of(t) for t in targets)
         self.log(f"Toi → {who} : {label}" + ("" if count else " (personne d'autre dans le salon)"))
         if self.include_me.get():
@@ -1540,13 +1668,6 @@ class PrankBoxApp:
             return
         self.received_var.set(f"Dernière farce reçue : {label} (de {name})")
         self.effects.run(cmd, {**(msg.get("args") or {}), "_from": msg.get("id")}, label)
-
-    def send_capture(self, jpg, requester):
-        """Appelé depuis un thread par effects.fx_capture."""
-        if requester in (None, self.peer.id):
-            save_capture(self.events, "moi", jpg)
-        else:
-            self.peer.send_file(jpg, requester)
 
     def send_text(self, cmd, entry):
         text = entry.get().strip()
@@ -1610,10 +1731,11 @@ class PrankBoxApp:
                     self.log(payload)
                 elif kind == "cmd":
                     self.on_remote_cmd(payload)
-                elif kind == "capture":
-                    name, path = payload
-                    self.log(f"Capture reçue de {name} : {os.path.basename(path)}")
-                    os.startfile(path)
+                elif kind == "cooldown":
+                    self.cooldown_var.set("Délai entre farces : aucun" if payload == 0
+                                          else f"Délai entre farces : {payload} s")
+                    self.cooldown_spin.delete(0, "end")
+                    self.cooldown_spin.insert(0, str(payload))
         except queue.Empty:
             pass
         self.root.after(50, self._poll)

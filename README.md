@@ -62,14 +62,19 @@ Sur le même Wi-Fi, les PC se trouvent tout seuls. Par Internet aussi, sans ouvr
 
 L'hôte doit garder PrankBox ouvert. S'il a fermé le programme, le message « Hôte introuvable » s'affiche : demande-lui de le relancer, le code reste le même.
 
+Tout le monde dans le salon doit avoir la même version. Le numéro est écrit sous le titre, dans la barre de gauche. Si ce n'est pas le cas, la connexion est refusée : relance PrankBox, la mise à jour part toute seule.
+
 ## Chefs et membres
 
 Une couronne à côté du pseudo marque un chef. L'hôte en est un. Dans la liste :
 
 - **Exclure** retire la personne pour cette session. Elle ne peut plus revenir avec le même pseudo tant que le salon est ouvert.
-- **Promouvoir chef** donne le droit d'exclure des membres et d'en promouvoir d'autres.
+- **Promouvoir chef** donne le droit d'exclure des membres, d'en promouvoir d'autres et de régler le délai entre deux farces.
+- **Retirer chef** enlève la couronne. Seul l'hôte peut le faire.
 
 Un chef promu ne peut pas exclure l'hôte, ni un autre chef. Promouvoir quelqu'un ne déplace pas le salon : le trafic reste sur le PC de celui qui l'a créé.
+
+**Délai entre deux farces** : l'hôte et les chefs choisissent un nombre de secondes (0 à 120) et cliquent sur **Appliquer**. `0` enlève la limite. Chacun doit attendre ce délai avant d'envoyer la farce suivante. **STOP** part tout de suite.
 
 ## Envoyer une farce
 
@@ -83,7 +88,7 @@ Les pages de la barre latérale regroupent les farces : Écran, Jeux, Chaos, Fun
 - Un ou plusieurs pseudos sélectionnés : elle ne part que chez eux.
 - **M'inclure aussi (pour tester)** joue la farce sur ton PC en même temps.
 - **Bloquer les farces qu'on m'envoie** ignore ce que tu reçois. Le bouton STOP passe quand même.
-- **Différé (min)** attend le nombre de minutes indiqué avant d'envoyer.
+- **Différé (min)** attend le nombre de minutes indiqué avant d'envoyer. Le délai entre deux farces s'applique au moment de l'envoi.
 - **Volume des farces reçues** règle le son chez toi. `0` coupe le son. **Tester** joue un bip.
 - **STOP** annule les effets en cours chez tout le monde.
 
