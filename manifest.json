@@ -2,6 +2,10 @@
  "files": {
   ".gitattributes": "c5b0bcb2cd0166e9e033413d4fda7e686c6ef751b3f7dd0ff35306d95f2c1b20",
   ".gitignore": "2183a74b051d5466148ff9a5f7276df19c62165aa0e27765cc1d473f181413a2",
+  "README.md": "65a958de5c54b7841625b0a0aff96659b89d30d83c9eaa478c257e7e570c8f19",
+  "docs/screenshots/ecran.png": "a5d1af08a04ec070df3728bb1cf0336f3814ae5f70e3377bb4f0c729093bac52",
+  "docs/screenshots/fun.png": "982092046d99dff5a987acb522dc942e0ceb0c17793206847a9671e5996e20e4",
+  "docs/screenshots/salon.png": "8a790f16ab7c37f0421cb9913a3e248d819379e7604b568c5ae570799cc9a924",
   "effects.py": "604273ac8ed56ec91f79e965978b005ef8ee8b2755b71fc53ad111535e30bcd1",
   "images/pieds1.png": "40983899af08bfc6a63c7d8094f8eff12ef2bb03f150f9b28411c71caf305b21",
   "images/pieds2.png": "ad622b7f61d651ccb8104746cdeeec7f9e97cf173bb05d73c56d7a6ca0739fd4",
@@ -9,11 +13,11 @@
   "images/screamer.png": "6ce1f6ed0b8e43a5fc8047d51a753fbf85bf9b3ed3b017adde6c3faacde52b11",
   "images/screamer2.png": "434bf1daf31df226c818ad9a046ab6840bc818be8027662cd20f2f73a874acb3",
   "images/screamer3.png": "4153b98264eaac9e31ba0dbc10b372eed8d1e49e4aa6f5a63d5d16109f128f4c",
-  "prankbox.py": "5dc966c8f21a50b10e903dc07fa6a81c894164088b7a6da2151ec6a610de0025",
+  "prankbox.py": "b1c90192ee0b0d16636bebb68378106e492884c397173638921b16d96407a446",
   "signature.py": "7a74b7e513073e11fe3b35bb97f1152bbde93ea6a0a060a7aee27581ba58a548",
   "tools/publier.py": "01bc2708e7a59e618a780fcc5513fe9f37cb4857d6cdc2bc405ae881e648ea18",
   "tools/render_poro.py": "2d14167970ffa437589cf887b57e4b3d020d46559a6d297948f3aa02dac159c1",
   "updater.py": "d5d929ab2961f685c874306d97eff68626b42b7e50202f9f078c37171e64fc4d"
  },
- "version": 2
+ "version": 3
 }
