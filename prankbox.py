@@ -139,7 +139,7 @@ class Peer:
         with self.lock:
             self.members.clear()
         self.events.put(("members", None))
-        self.events.put(("status", f"Connexion au salon {format_room(room)}…"))
+        self.events.put(("status", "Connexion au salon…"))
         response = self.response
         if response is not None:
             try:
@@ -225,7 +225,7 @@ class Peer:
 
     def _handle(self, event):
         if event.get("event") == "open":
-            self.events.put(("status", f"Connecté au salon {format_room(self.room)}"))
+            self.events.put(("status", "Connecté au salon"))
             self._queue({"type": "hello", "new": True})
             return
         if event.get("event") != "message":
@@ -336,7 +336,7 @@ class PrankBoxApp:
         self.room_var.set(format_room(room))
         self.save_config()
         self.peer.join(room, name)
-        self.log(f"Tu rejoins le salon {format_room(room)} en tant que {name}")
+        self.log(f"Tu rejoins le salon en tant que {name}")
 
     def save_config(self):
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -353,6 +353,13 @@ class PrankBoxApp:
     def new_room(self):
         self.room_var.set(format_room(new_room_code()))
         self.join()
+
+    def toggle_room_visibility(self):
+        hidden = self.room_entry.cget("show") == ""
+        self.room_entry.configure(show="•" if hidden else "")
+        self.reveal_button.configure(text="Afficher" if hidden else "Masquer")
+        if not hidden:
+            self.root.after(10000, lambda: self.room_entry.cget("show") or self.toggle_room_visibility())
 
     def copy_room(self):
         self.root.clipboard_clear()
@@ -502,7 +509,13 @@ class PrankBoxApp:
                 row=row, column=0, sticky="w", padx=4, pady=3)
             entry = make_entry(card, textvariable=var)
             entry.configure(font=font, fg=ORANGE if row else TEXT)
-            entry.grid(row=row, column=1, columnspan=2, sticky="ew", padx=4, pady=3, ipady=4)
+            entry.grid(row=row, column=1, columnspan=1 if row else 2, sticky="ew", padx=4, pady=3, ipady=4)
+        # Code masqué par défaut : il ne doit pas apparaître en stream ou en partage d'écran.
+        self.room_entry = entry
+        entry.configure(show="•")
+        self.reveal_button = make_button(card, "Afficher", self.toggle_room_visibility, bg=DARK_BTN,
+                                         hover=DARK_BTN_HOVER, fg=TEXT, size=9)
+        self.reveal_button.grid(row=1, column=2, sticky="ew", padx=4, pady=3)
         make_button(card, "Rejoindre", self.join).grid(row=2, column=0, sticky="ew", padx=4, pady=(6, 4))
         make_button(card, "Nouveau salon", self.new_room, bg=DARK_BTN, hover=DARK_BTN_HOVER, fg=TEXT,
                     size=9).grid(row=2, column=1, sticky="ew", padx=4, pady=(6, 4))

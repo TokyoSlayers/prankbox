@@ -9,11 +9,11 @@
   "images/screamer.png": "6ce1f6ed0b8e43a5fc8047d51a753fbf85bf9b3ed3b017adde6c3faacde52b11",
   "images/screamer2.png": "434bf1daf31df226c818ad9a046ab6840bc818be8027662cd20f2f73a874acb3",
   "images/screamer3.png": "4153b98264eaac9e31ba0dbc10b372eed8d1e49e4aa6f5a63d5d16109f128f4c",
-  "prankbox.py": "5bbdaf5fc7a82fc0d1bb59bddc8041f45c9862358b68fa8f26719a579fb1f9f0",
+  "prankbox.py": "5dc966c8f21a50b10e903dc07fa6a81c894164088b7a6da2151ec6a610de0025",
   "signature.py": "7a74b7e513073e11fe3b35bb97f1152bbde93ea6a0a060a7aee27581ba58a548",
   "tools/publier.py": "01bc2708e7a59e618a780fcc5513fe9f37cb4857d6cdc2bc405ae881e648ea18",
   "tools/render_poro.py": "2d14167970ffa437589cf887b57e4b3d020d46559a6d297948f3aa02dac159c1",
   "updater.py": "d5d929ab2961f685c874306d97eff68626b42b7e50202f9f078c37171e64fc4d"
  },
- "version": 1
+ "version": 2
 }
