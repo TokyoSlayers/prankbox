@@ -144,14 +144,37 @@ def _install_dir(frozen, script_dir):
     return script_dir
 
 
+def _stamp_path():
+    """Empreinte du .exe déjà installé. Elle reste dans AppData, pas à côté du programme."""
+    return os.path.join(_appdata(), "release.txt")
+
+
 def _stamp_ok(folder, digest):
     exe = os.path.join(folder, "PrankBox.exe")
-    stamp = os.path.join(folder, ".prankbox_release")
     try:
-        with open(stamp, encoding="utf-8") as f:
-            return os.path.isfile(exe) and f.read().strip() == digest
+        with open(_stamp_path(), encoding="utf-8") as f:
+            return os.path.isfile(exe) and not os.path.isdir(os.path.join(folder, "_internal")) and f.read().strip() == digest
     except OSError:
         return False
+
+
+def _write_stamp(digest):
+    os.makedirs(_appdata(), exist_ok=True)
+    with open(_stamp_path(), "w", encoding="utf-8") as f:
+        f.write(digest)
+
+
+def _drop_bundle(folder):
+    """Enlève l'ancien dossier posé à côté du .exe."""
+    internal = os.path.join(folder, "_internal")
+    if os.path.isdir(internal):
+        shutil.rmtree(internal, ignore_errors=True)
+    leftover = os.path.join(folder, ".prankbox_release")
+    if os.path.isfile(leftover):
+        try:
+            os.remove(leftover)
+        except OSError:
+            pass
 
 
 def windows_plan(frozen, release, log=print):
@@ -250,8 +273,9 @@ def _schedule_replace(stage, dest, pid):
     text = (
         f"Wait-Process -Id {int(pid)} -ErrorAction SilentlyContinue\r\n"
         "Start-Sleep -Seconds 1\r\n"
-        f"& robocopy '{ps(stage)}' '{ps(dest)}' /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null\r\n"
-        "if ($LASTEXITCODE -ge 8) { exit 1 }\r\n"
+        f"Copy-Item -LiteralPath '{ps(os.path.join(stage, 'PrankBox.exe'))}' -Destination '{ps(os.path.join(dest, 'PrankBox.exe'))}' -Force\r\n"
+        f"Remove-Item -LiteralPath '{ps(os.path.join(dest, '_internal'))}' -Recurse -Force -ErrorAction SilentlyContinue\r\n"
+        f"Remove-Item -LiteralPath '{ps(os.path.join(dest, '.prankbox_release'))}' -Force -ErrorAction SilentlyContinue\r\n"
         f"Start-Process -FilePath '{ps(os.path.join(dest, 'PrankBox.exe'))}'\r\n"
         f"Remove-Item -LiteralPath '{ps(stage)}' -Recurse -Force -ErrorAction SilentlyContinue\r\n"
     )
@@ -308,13 +332,12 @@ def apply_windows(plan, frozen, script_dir, on_status=None):
             if os.path.isdir(stage):
                 shutil.rmtree(stage)
             _extract(zip_path, stage)
-            with open(os.path.join(stage, ".prankbox_release"), "w", encoding="utf-8") as f:
-                f.write(plan["sha256"])
+            _write_stamp(plan["sha256"])
             _schedule_replace(stage, dest, os.getpid())
             return True
         _extract(zip_path, dest)
-        with open(os.path.join(dest, ".prankbox_release"), "w", encoding="utf-8") as f:
-            f.write(plan["sha256"])
+        _drop_bundle(dest)
+        _write_stamp(plan["sha256"])
         _migrate_config(script_dir)
         _launch(os.path.join(dest, "PrankBox.exe"))
         _remove_python(script_dir)

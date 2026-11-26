@@ -2,7 +2,7 @@
  "files": {
   ".gitattributes": "c5b0bcb2cd0166e9e033413d4fda7e686c6ef751b3f7dd0ff35306d95f2c1b20",
   ".gitignore": "37322d5db4daa675310bcbdbb707520e0e59020edb8b09a1055c1be58975fcdb",
-  "README.md": "f43e5fe5cd72547025826f75beca4fa5b819438bb32f5613cfc3a1af12691caf",
+  "README.md": "e90d4bdbb3a30268a89c93c935e17676779dfb88d7372312f4e247bdae81b42b",
   "docs/screenshots/ecran.png": "a5d1af08a04ec070df3728bb1cf0336f3814ae5f70e3377bb4f0c729093bac52",
   "docs/screenshots/fun.png": "982092046d99dff5a987acb522dc942e0ceb0c17793206847a9671e5996e20e4",
   "docs/screenshots/salon.png": "8a790f16ab7c37f0421cb9913a3e248d819379e7604b568c5ae570799cc9a924",
@@ -13,13 +13,13 @@
   "images/screamer.png": "6ce1f6ed0b8e43a5fc8047d51a753fbf85bf9b3ed3b017adde6c3faacde52b11",
   "images/screamer2.png": "434bf1daf31df226c818ad9a046ab6840bc818be8027662cd20f2f73a874acb3",
   "images/screamer3.png": "4153b98264eaac9e31ba0dbc10b372eed8d1e49e4aa6f5a63d5d16109f128f4c",
-  "prankbox.py": "9222bb9ec52229dbd3bb0db28d04d0cca700d85cd10a6f9eda821f1a09e53a44",
+  "prankbox.py": "bceff582b001817f5fafb79e1d69a8ee2020bae8870700b13220bd92170232df",
   "signature.py": "7a74b7e513073e11fe3b35bb97f1152bbde93ea6a0a060a7aee27581ba58a548",
-  "tools/build_windows.py": "3f49166d2a9c963971861e2b819d5885e6ead8a6a7c2dae5afbb22dd885ece86",
+  "tools/build_windows.py": "b47b2e91ca6daa349e909fb5c155d4903e89b39fdf52b164ea3c4afb3e8d8b08",
   "tools/publier.py": "be223d9152d3a35b6154c56893e1653f69f997986348f97520adff97d18b1d8b",
   "tools/render_poro.py": "2d14167970ffa437589cf887b57e4b3d020d46559a6d297948f3aa02dac159c1",
-  "updater.py": "47e76959191c8aabbf71e79c55831b84dce5edb9024877e1a43bdc12c32baff9",
-  "windows.json": "ee6f4392ac8949753d25267db7cb4d8d84766b5aff443a81002fb632ff11d121"
+  "updater.py": "5d317ad2012cb59282d4b1365263cde76d155eada76d84f22e1a755bf73168d4",
+  "windows.json": "7389e707bf4f00362713fd5da63d8f4b19cbb4d4734e8cab269e69e873ad6d94"
  },
- "version": 5
+ "version": 6
 }

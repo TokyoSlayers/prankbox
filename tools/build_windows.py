@@ -1,7 +1,8 @@
 """Construit le programme Windows public de PrankBox.
 
-Les images et les sons de tiers (poro, OIIA) ne sont pas inclus : ce dossier
-est publié sur GitHub. Usage interne : tools/publier.py appelle package().
+Le résultat publié est un seul PrankBox.exe : images et moteur sont dedans.
+Les images et les sons de tiers (poro, OIIA) ne sont pas inclus.
+Usage interne : tools/publier.py appelle package().
 """
 
 import hashlib
@@ -42,7 +43,7 @@ def package(dest_root=None):
 def _package(dest_root, images, source):
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--noconfirm", "--clean", "--windowed",
+        "--noconfirm", "--clean", "--windowed", "--onefile",
         "--name", "PrankBox",
         "--distpath", dest_root,
         "--workpath", os.path.join(ROOT, "build", "release"),
@@ -53,17 +54,16 @@ def _package(dest_root, images, source):
     cmd.append(source)
     subprocess.run(cmd, cwd=ROOT, check=True)
 
-    folder = os.path.join(dest_root, "PrankBox")
+    exe = os.path.join(dest_root, "PrankBox.exe")
+    if not os.path.isfile(exe):
+        raise SystemExit("PrankBox.exe introuvable après la construction.")
     zip_path = os.path.join(dest_root, ZIP_NAME)
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for dirpath, _dirnames, filenames in os.walk(folder):
-            for name in filenames:
-                full = os.path.join(dirpath, name)
-                archive.write(full, os.path.relpath(full, folder).replace("\\", "/"))
+        archive.write(exe, "PrankBox.exe")
     with zipfile.ZipFile(zip_path) as archive:
-        banned = [name for name in archive.namelist() if _is_third_party(name)]
-    if banned:
-        raise SystemExit("Le zip public contient des fichiers de tiers.")
+        names = archive.namelist()
+    if names != ["PrankBox.exe"] or any(_is_third_party(name) for name in names):
+        raise SystemExit("Le zip doit contenir uniquement PrankBox.exe.")
     with open(zip_path, "rb") as f:
         digest = hashlib.sha256(f.read()).hexdigest()
     return zip_path, digest

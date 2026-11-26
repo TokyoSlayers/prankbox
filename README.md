@@ -17,8 +17,8 @@ Le pseudo et le salon sont conservés. Tout le monde doit garder la même versio
 Python n'est plus nécessaire.
 
 1. Ouvre les [versions publiées](https://github.com/TokyoSlayers/prankbox/releases) et télécharge **PrankBox-windows.zip**.
-2. Dézippe le dossier, par exemple dans `Téléchargements\PrankBox`.
-3. Lance **PrankBox.exe**. Il faut garder tout le dossier, pas seulement le `.exe`.
+2. Dézippe-le. Il contient un seul fichier : **PrankBox.exe**.
+3. Lance ce fichier. Images, sons et moteur sont dedans. Les réglages restent dans `%APPDATA%\PrankBox`.
 
 Au lancement, PrankBox regarde GitHub et se met à jour tout seul. La mise à jour est signée : un fichier modifié sur le dépôt sans cette signature n'est pas installé.
 
