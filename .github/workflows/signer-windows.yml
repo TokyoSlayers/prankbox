@@ -1,0 +1,103 @@
+name: Signer Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      policy:
+        description: Politique SignPath
+        required: true
+        default: test-signing
+        type: choice
+        options:
+          - test-signing
+          - release-signing
+  release:
+    types: [published]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  signer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Installer PyInstaller
+        run: python -m pip install pyinstaller
+
+      - name: Installer UPX
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:LOCALAPPDATA "PrankBox\upx"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $zip = Join-Path $env:RUNNER_TEMP "upx.zip"
+          Invoke-WebRequest -Uri "https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-win64.zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+
+      - name: Construire PrankBox.exe
+        run: python tools/build_windows.py
+
+      - name: Déposer le fichier à signer
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrankBox-unsigned
+          path: dist/release/PrankBox.exe
+          if-no-files-found: error
+
+      - name: Vérifier SignPath
+        shell: pwsh
+        env:
+          ORG: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          PROJECT: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+        run: |
+          if (-not $env:ORG -or -not $env:PROJECT) {
+            throw "Ajoute les variables SIGNPATH_ORGANIZATION_ID et SIGNPATH_PROJECT_SLUG, et le secret SIGNPATH_API_TOKEN."
+          }
+
+      - name: Signer avec SignPath
+        id: sign
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ github.event_name == 'release' && 'release-signing' || inputs.policy }}
+          artifact-configuration-slug: prankbox-exe
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Préparer le zip public
+        shell: python
+        run: |
+          import os
+          import zipfile
+          found = None
+          for folder, _dirs, files in os.walk("signed"):
+              for name in files:
+                  if name.lower() == "prankbox.exe":
+                      found = os.path.join(folder, name)
+          if not found:
+              raise SystemExit("PrankBox.exe signé introuvable")
+          with zipfile.ZipFile("PrankBox-windows.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
+              archive.write(found, "PrankBox.exe")
+
+      - name: Garder le zip signé
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrankBox-signe
+          path: PrankBox-windows.zip
+
+      - name: Publier le zip signé
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release upload ${{ github.event.release.tag_name }} PrankBox-windows.zip --clobber --repo ${{ github.repository }}

@@ -8,7 +8,6 @@ garde-en une copie, si tu la perds il faudra redonner les fichiers à la main.
 """
 
 import hashlib
-import importlib.util
 import json
 import os
 import re
@@ -49,16 +48,7 @@ def _write_windows(version, digest):
         f.write(json.dumps(info, indent=1, sort_keys=True).encode() + b"\n")
 
 
-def _build_windows():
-    spec = importlib.util.spec_from_file_location(
-        "build_windows", os.path.join(ROOT, "tools", "build_windows.py"))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.package()
-
-
-def main():
-    message = " ".join(sys.argv[1:]) or "Mise à jour"
+def load_secret():
     try:
         with open(KEY_PATH) as f:
             secret = bytes.fromhex(f.read().strip())
@@ -66,19 +56,17 @@ def main():
         sys.exit(f"Clé privée introuvable ou illisible : {KEY_PATH}")
     if signature.public_key(secret) != updater.PUBLIC_KEY:
         sys.exit("Cette clé privée ne correspond pas à PUBLIC_KEY dans updater.py : publication annulée.")
-    subprocess.run(["gh", "auth", "status"], check=True)
+    return secret
 
-    version = updater.local_version() + 1
-    _set_release(version)
-    zip_path, digest = _build_windows()
-    _write_windows(version, digest)
 
+def publish_tree(secret, message):
+    """Signe le manifeste et pousse. Le .exe signé est ajouté ensuite par GitHub Actions."""
     git("add", "-A")
     files = [f for f in git("ls-files", "-z").split("\0") if f and f not in updater.PROTECTED]
     if not git("status", "--porcelain") and os.path.exists(os.path.join(ROOT, updater.MANIFEST)):
         sys.exit("Rien de nouveau à publier.")
 
-    manifest = {"version": version, "files": {}}
+    manifest = {"version": updater.local_version() + 1, "files": {}}
     for rel in files:
         with open(os.path.join(ROOT, rel), "rb") as f:
             manifest["files"][rel] = hashlib.sha256(f.read()).hexdigest()
@@ -91,13 +79,24 @@ def main():
     git("add", "-A")
     git("commit", "-q", "-m", f"v{manifest['version']} : {message}")
     git("push", "-q", "origin", updater.BRANCH)
+    return manifest
+
+
+def main():
+    message = " ".join(sys.argv[1:]) or "Mise à jour"
+    secret = load_secret()
+    subprocess.run(["gh", "auth", "status"], check=True)
+
+    version = updater.local_version() + 1
+    _set_release(version)
+    manifest = publish_tree(secret, message)
     subprocess.run(
-        ["gh", "release", "create", f"v{version}", zip_path,
+        ["gh", "release", "create", f"v{version}",
          "--repo", updater.REPO, "--title", f"PrankBox {version}", "--notes", message],
         check=True,
     )
-    print(f"Version {manifest['version']} publiée ({len(files)} fichiers signés). "
-          "L'ancienne version téléchargera le programme Windows au prochain lancement.")
+    print(f"Version {manifest['version']} publiée. GitHub va faire signer PrankBox.exe.")
+    print("Quand l'action Signer Windows est verte : python tools/finaliser_windows.py")
 
 
 if __name__ == "__main__":
