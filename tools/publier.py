@@ -16,6 +16,8 @@ import sys
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import build_windows  # noqa: E402
 import signature  # noqa: E402
 import updater  # noqa: E402
 
@@ -82,6 +84,21 @@ def publish_tree(secret, message):
     return manifest
 
 
+def signpath_configured():
+    """Vrai quand les accès SignPath sont sur le dépôt. Avant ça, l'exe part tel quel."""
+    listed = subprocess.run(
+        ["gh", "variable", "list", "--repo", updater.REPO],
+        capture_output=True, text=True, check=False,
+    )
+    secrets = subprocess.run(
+        ["gh", "secret", "list", "--repo", updater.REPO],
+        capture_output=True, text=True, check=False,
+    )
+    text = listed.stdout + "\n" + secrets.stdout
+    needed = ("SIGNPATH_ORGANIZATION_ID", "SIGNPATH_PROJECT_SLUG", "SIGNPATH_API_TOKEN")
+    return all(name in text for name in needed)
+
+
 def main():
     message = " ".join(sys.argv[1:]) or "Mise à jour"
     secret = load_secret()
@@ -89,14 +106,28 @@ def main():
 
     version = updater.local_version() + 1
     _set_release(version)
-    manifest = publish_tree(secret, message)
+    if signpath_configured():
+        manifest = publish_tree(secret, message)
+        subprocess.run(
+            ["gh", "release", "create", f"v{version}",
+             "--repo", updater.REPO, "--title", f"PrankBox {version}", "--notes", message],
+            check=True,
+        )
+        print(f"Version {manifest['version']} publiée. GitHub va faire signer PrankBox.exe.")
+        print("Quand l'action Signer Windows est verte : python tools/finaliser_windows.py")
+        return
+
+    zip_path, digest = build_windows.package()
+    _write_windows(version, digest)
     subprocess.run(
-        ["gh", "release", "create", f"v{version}",
+        ["gh", "release", "create", f"v{version}", zip_path,
          "--repo", updater.REPO, "--title", f"PrankBox {version}", "--notes", message],
         check=True,
     )
-    print(f"Version {manifest['version']} publiée. GitHub va faire signer PrankBox.exe.")
-    print("Quand l'action Signer Windows est verte : python tools/finaliser_windows.py")
+    manifest = publish_tree(secret, message)
+    print(f"Version {manifest['version']} publiée, avec le programme Windows.")
+    print("SignPath n'est pas encore branché : l'exe part quand même, l'avertissement Windows reste.")
+    print("Dès que les accès SignPath sont sur le dépôt, les prochaines versions repasseront par la signature.")
 
 
 if __name__ == "__main__":

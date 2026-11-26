@@ -1,7 +1,7 @@
 {
  "files": {
   ".gitattributes": "c5b0bcb2cd0166e9e033413d4fda7e686c6ef751b3f7dd0ff35306d95f2c1b20",
-  ".github/workflows/signer-windows.yml": "081589e75d24f320486853be31a972711125da9bda686c72fb89cacef29d821e",
+  ".github/workflows/signer-windows.yml": "b69ca2fb6dd1903ebd3d0eebb89be6318eab4230215b515599d8d04743c962a4",
   ".gitignore": "37322d5db4daa675310bcbdbb707520e0e59020edb8b09a1055c1be58975fcdb",
   ".signpath/artifact-configuration.xml": "12b6e4b74440dbbed267ba82f36c6ca362714c21b60d5abad832717e4782b78f",
   "LICENSE": "3311bc1fc4703532a61a5301284d719da4044a7b6f3d18713fe58a7ca59eb356",
@@ -16,14 +16,14 @@
   "images/screamer.png": "6ce1f6ed0b8e43a5fc8047d51a753fbf85bf9b3ed3b017adde6c3faacde52b11",
   "images/screamer2.png": "434bf1daf31df226c818ad9a046ab6840bc818be8027662cd20f2f73a874acb3",
   "images/screamer3.png": "4153b98264eaac9e31ba0dbc10b372eed8d1e49e4aa6f5a63d5d16109f128f4c",
-  "prankbox.py": "b65db025ae3896e2e2d84ea9fcfde36d5101bd5a296818be1fe88a4a2e70f2d5",
+  "prankbox.py": "f1df132f938ddac363c47d57f787daee52f858e0fbf69beecd67cd755d583423",
   "signature.py": "7a74b7e513073e11fe3b35bb97f1152bbde93ea6a0a060a7aee27581ba58a548",
   "tools/build_windows.py": "3761b449cdfb84deb7f828da5e5414521f9ecbdc8d8c601525635e7af7225582",
   "tools/finaliser_windows.py": "5f68b2858120cc0ac6f2c8d60061c7a9cca64a02dc8f4e695eb90773e647bd9e",
-  "tools/publier.py": "8a91745d11bb30a806ed330d4b2671df92448ecb710b9cd1f2f05de6b3017039",
+  "tools/publier.py": "bbcc4c1dfa2f653b4bced284de324b6778c75c2c0c787cd58452715eb2116313",
   "tools/render_poro.py": "2d14167970ffa437589cf887b57e4b3d020d46559a6d297948f3aa02dac159c1",
   "updater.py": "5d317ad2012cb59282d4b1365263cde76d155eada76d84f22e1a755bf73168d4",
-  "windows.json": "b199a2d4491f39df4110f719be9b287b8ca7bdc3cd3e51438c70928e3b58da4e"
+  "windows.json": "19fbd9f8b48de67daa0899770ebe3afbbecfd93e832932083cd23c599a75ab10"
  },
- "version": 8
+ "version": 9
 }

@@ -20,6 +20,8 @@ permissions:
 
 jobs:
   signer:
+    # Tant que SignPath n'a pas donné ces valeurs, la publication envoie l'exe directement.
+    if: vars.SIGNPATH_ORGANIZATION_ID != '' && vars.SIGNPATH_PROJECT_SLUG != ''
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
