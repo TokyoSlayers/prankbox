@@ -1,25 +1,29 @@
 {
  "files": {
   ".gitattributes": "c5b0bcb2cd0166e9e033413d4fda7e686c6ef751b3f7dd0ff35306d95f2c1b20",
+  ".github/workflows/signer-windows.yml": "081589e75d24f320486853be31a972711125da9bda686c72fb89cacef29d821e",
   ".gitignore": "37322d5db4daa675310bcbdbb707520e0e59020edb8b09a1055c1be58975fcdb",
+  ".signpath/artifact-configuration.xml": "12b6e4b74440dbbed267ba82f36c6ca362714c21b60d5abad832717e4782b78f",
+  "LICENSE": "3311bc1fc4703532a61a5301284d719da4044a7b6f3d18713fe58a7ca59eb356",
   "README.md": "e90d4bdbb3a30268a89c93c935e17676779dfb88d7372312f4e247bdae81b42b",
   "docs/screenshots/ecran.png": "a5d1af08a04ec070df3728bb1cf0336f3814ae5f70e3377bb4f0c729093bac52",
   "docs/screenshots/fun.png": "982092046d99dff5a987acb522dc942e0ceb0c17793206847a9671e5996e20e4",
   "docs/screenshots/salon.png": "8a790f16ab7c37f0421cb9913a3e248d819379e7604b568c5ae570799cc9a924",
-  "effects.py": "98cc4e4ce9bb8aad7016dddc44b2cb5e83b814a6a8e4a2a3dd1c2be21276d316",
+  "effects.py": "3f5949cbc7c9fcaa3cae9164ac558f08e8eecd2cde14382abb1748a3d990ad6b",
   "images/pieds1.png": "40983899af08bfc6a63c7d8094f8eff12ef2bb03f150f9b28411c71caf305b21",
   "images/pieds2.png": "ad622b7f61d651ccb8104746cdeeec7f9e97cf173bb05d73c56d7a6ca0739fd4",
   "images/pieds3.png": "89313520767c4ee9f926cba35b40a7733282b8bf4d4928082866ac49cc1d6193",
   "images/screamer.png": "6ce1f6ed0b8e43a5fc8047d51a753fbf85bf9b3ed3b017adde6c3faacde52b11",
   "images/screamer2.png": "434bf1daf31df226c818ad9a046ab6840bc818be8027662cd20f2f73a874acb3",
   "images/screamer3.png": "4153b98264eaac9e31ba0dbc10b372eed8d1e49e4aa6f5a63d5d16109f128f4c",
-  "prankbox.py": "e53b80163ebdbaab4c85862079fed8d69b9d889c8195aee4dc9b3bf5b4b16e32",
+  "prankbox.py": "b65db025ae3896e2e2d84ea9fcfde36d5101bd5a296818be1fe88a4a2e70f2d5",
   "signature.py": "7a74b7e513073e11fe3b35bb97f1152bbde93ea6a0a060a7aee27581ba58a548",
   "tools/build_windows.py": "3761b449cdfb84deb7f828da5e5414521f9ecbdc8d8c601525635e7af7225582",
-  "tools/publier.py": "be223d9152d3a35b6154c56893e1653f69f997986348f97520adff97d18b1d8b",
+  "tools/finaliser_windows.py": "5f68b2858120cc0ac6f2c8d60061c7a9cca64a02dc8f4e695eb90773e647bd9e",
+  "tools/publier.py": "8a91745d11bb30a806ed330d4b2671df92448ecb710b9cd1f2f05de6b3017039",
   "tools/render_poro.py": "2d14167970ffa437589cf887b57e4b3d020d46559a6d297948f3aa02dac159c1",
   "updater.py": "5d317ad2012cb59282d4b1365263cde76d155eada76d84f22e1a755bf73168d4",
   "windows.json": "b199a2d4491f39df4110f719be9b287b8ca7bdc3cd3e51438c70928e3b58da4e"
  },
- "version": 7
+ "version": 8
 }
