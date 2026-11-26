@@ -26,6 +26,7 @@ import threading
 import time
 import traceback
 import tkinter as tk
+import tkinter.font as tkfont
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -108,8 +109,8 @@ RANDOM_POOL = [cmd for _, cmd in
 HOST_PORT = 47777
 # À augmenter quand le protocole change. Le salon refuse toute autre valeur.
 PROTOCOL = 4
-APP_RELEASE = 11  # numéro interne, comparé par les mises à jour déjà installées
-APP_VERSION = "9.2"  # numéro affiché. Chaque publication le passe à 9.1, puis 9.2…
+APP_RELEASE = 12  # numéro interne, comparé par les mises à jour déjà installées
+APP_VERSION = "9.3"  # numéro affiché. Chaque publication le passe à 9.1, puis 9.2…
 MAX_FRAME = 4_000_000
 ROLE_LABEL = {"hote": "hôte", "chef": "chef", "membre": "membre"}
 PAGES = [
@@ -1166,13 +1167,141 @@ class Peer:
 
 # ------------------------------------------------------------------ Interface
 
+def round_rect(canvas, x1, y1, x2, y2, radius, **kw):
+    r = max(0, min(radius, (x2 - x1) / 2, (y2 - y1) / 2))
+    points = (x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2,
+              x2 - r, y2, x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1)
+    return canvas.create_polygon(points, smooth=True, **kw)
+
+
+class RoundButton(tk.Canvas):
+    """Bouton aux coins arrondis : Tk ne sait pas arrondir ses boutons, on le dessine."""
+
+    def __init__(self, parent, text, command, fill=ORANGE, hover=ORANGE_HOVER, fg=BTN_TEXT, size=10,
+                 radius=10, anchor="center", padx=12, pady=8):
+        self._text, self._command = text, command
+        self._fill, self._hover, self._fg = fill, hover, fg
+        self._radius, self._anchor, self._padx = radius, anchor, padx
+        self._inside = self._pressed = False
+        self._font = tkfont.Font(family="Segoe UI", size=size, weight="bold")
+        super().__init__(parent, height=self._font.metrics("linespace") + 2 * pady,
+                         width=self._font.measure(text) + 2 * padx, bg=parent.cget("bg"),
+                         highlightthickness=0, bd=0, cursor="hand2")
+        self.bind("<Configure>", lambda e: self._draw())
+        self.bind("<Enter>", lambda e: self._set(inside=True))
+        self.bind("<Leave>", lambda e: self._set(inside=False, pressed=False))
+        self.bind("<ButtonPress-1>", lambda e: self._set(pressed=True))
+        self.bind("<ButtonRelease-1>", self._release)
+
+    def configure(self, cnf=None, **kw):
+        changed = False
+        for key in ("text", "fill", "hover", "fg", "anchor", "padx"):
+            if key in kw:
+                setattr(self, "_" + key, kw.pop(key))
+                changed = True
+        result = super().configure(cnf, **kw) if cnf or kw else None
+        if changed:
+            super().configure(width=self._font.measure(self._text) + 2 * self._padx)
+            self._draw()
+        return result
+
+    config = configure
+
+    def _set(self, inside=None, pressed=None):
+        if inside is not None:
+            self._inside = inside
+        if pressed is not None:
+            self._pressed = pressed
+        self._draw()
+
+    def _release(self, event):
+        fire = self._pressed and 0 <= event.x < self.winfo_width() and 0 <= event.y < self.winfo_height()
+        self._set(pressed=False)
+        if fire and self._command:
+            self._command()
+
+    def _draw(self):
+        self.delete("all")
+        w, h = self.winfo_width(), self.winfo_height()
+        if w < 4 or h < 4:
+            return
+        drop = 1 if self._pressed else 0
+        round_rect(self, 1, 1 + drop, w - 2, h - 2 + drop, self._radius,
+                   fill=self._hover if self._inside else self._fill, outline="")
+        x = self._padx if self._anchor == "w" else w / 2
+        self.create_text(x, h / 2 + drop, text=self._text, fill=self._fg, font=self._font,
+                         anchor=self._anchor if self._anchor == "w" else "center")
+
+
+class RoundCard(tk.Canvas):
+    """Carte aux coins arrondis. Le contenu va dans .inner."""
+
+    MARGIN = 6
+
+    def __init__(self, parent, fill=CARD, border=CARD_BORDER, radius=16):
+        super().__init__(parent, bg=parent.cget("bg"), highlightthickness=0, bd=0, height=40)
+        self._fill, self._border, self._radius = fill, border, radius
+        self.inner = tk.Frame(self, bg=fill)
+        self._window = self.create_window(self.MARGIN, self.MARGIN, window=self.inner, anchor="nw")
+        self.inner.bind("<Configure>", lambda e: self._sync())
+        self.bind("<Configure>", lambda e: self._sync())
+
+    def _sync(self):
+        w = self.winfo_width()
+        h = self.inner.winfo_reqheight() + 2 * self.MARGIN
+        if int(float(self.cget("height"))) != h:
+            super().configure(height=h)
+        self.itemconfigure(self._window, width=max(1, w - 2 * self.MARGIN))
+        self.delete("fond")
+        round_rect(self, 1, 1, w - 2, h - 2, self._radius, fill=self._fill, outline=self._border,
+                   width=1, tags="fond")
+        self.tag_lower("fond")
+
+
+class RoundSlider(tk.Canvas):
+    """Curseur arrondi relié à une variable Tk."""
+
+    def __init__(self, parent, variable, command, from_=0, to=100):
+        super().__init__(parent, height=34, width=160, bg=parent.cget("bg"), highlightthickness=0, bd=0,
+                         cursor="hand2")
+        self._var, self._command, self._from, self._to = variable, command, from_, to
+        self._font = tkfont.Font(family="Segoe UI", size=9, weight="bold")
+        self.bind("<Configure>", lambda e: self._draw())
+        self.bind("<ButtonPress-1>", self._drag)
+        self.bind("<B1-Motion>", self._drag)
+        variable.trace_add("write", lambda *_: self._draw())
+
+    def _bounds(self):
+        return 12, max(40, self.winfo_width() - 52)
+
+    def _drag(self, event):
+        x0, x1 = self._bounds()
+        ratio = min(1.0, max(0.0, (event.x - x0) / (x1 - x0)))
+        value = round(self._from + ratio * (self._to - self._from))
+        if value != self._var.get():
+            self._var.set(value)
+            self._command(value)
+
+    def _draw(self):
+        self.delete("all")
+        x0, x1 = self._bounds()
+        y = self.winfo_height() / 2
+        try:
+            value = float(self._var.get())
+        except (tk.TclError, ValueError):
+            value = self._from
+        ratio = (value - self._from) / (self._to - self._from)
+        knob = x0 + ratio * (x1 - x0)
+        self.create_line(x0, y, x1, y, width=8, fill=INPUT_BG, capstyle="round")
+        if knob > x0:
+            self.create_line(x0, y, knob, y, width=8, fill=ORANGE, capstyle="round")
+        self.create_oval(knob - 9, y - 9, knob + 9, y + 9, fill=TEXT, outline=ORANGE, width=2)
+        self.create_text(self.winfo_width() - 8, y, text=f"{int(value)}", fill=TEXT, font=self._font,
+                         anchor="e")
+
+
 def make_button(parent, text, command, bg=ORANGE, hover=ORANGE_HOVER, fg=BTN_TEXT, size=10):
-    btn = tk.Button(parent, text=text, command=command, bg=bg, fg=fg, activebackground=hover,
-                    activeforeground=fg, relief="flat", bd=0, cursor="hand2",
-                    font=("Segoe UI", size, "bold"), padx=6, pady=8)
-    btn.bind("<Enter>", lambda e: btn.configure(bg=hover))
-    btn.bind("<Leave>", lambda e: btn.configure(bg=bg))
-    return btn
+    return RoundButton(parent, text, command, fill=bg, hover=hover, fg=fg, size=size, pady=9)
 
 
 def make_entry(parent, **kw):
@@ -1348,32 +1477,35 @@ class PrankBoxApp:
         self._flows = []
         self._cols = 3
         self._wide = True
+        self._compact = False
+        self._responsive = []
+        self._wraps = []
+        self._cards = []
         self._active = "salon"
 
         self.sidebar = tk.Frame(root, bg=SIDEBAR, width=232)
         self.sidebar.pack_propagate(False)
-        brand = tk.Frame(self.sidebar, bg=SIDEBAR)
-        brand.pack(fill="x", padx=16, pady=(18, 8))
-        tk.Label(brand, text="PrankBox", bg=SIDEBAR, fg="white",
-                 font=("Segoe UI Black", 18)).pack(anchor="w")
-        tk.Label(brand, text="Trollez-vous entre potes", bg=SIDEBAR, fg=MUTED,
-                 font=("Segoe UI", 9)).pack(anchor="w")
-        tk.Label(brand, text=f"Version {APP_VERSION}", bg=SIDEBAR, fg=MUTED,
-                 font=("Segoe UI", 8)).pack(anchor="w")
+        self.brand = tk.Frame(self.sidebar, bg=SIDEBAR)
+        self.brand.pack(fill="x", padx=16, pady=(18, 8))
+        self.brand_title = tk.Label(self.brand, text="PrankBox", bg=SIDEBAR, fg="white",
+                                    font=("Segoe UI Black", 18))
+        self.brand_tag = tk.Label(self.brand, text="Trollez-vous entre potes", bg=SIDEBAR, fg=MUTED,
+                                  font=("Segoe UI", 9))
+        self.brand_version = tk.Label(self.brand, text=f"Version {APP_VERSION}", bg=SIDEBAR, fg=MUTED,
+                                      font=("Segoe UI", 8))
+        self.brand_line = tk.Frame(self.sidebar, bg=ORANGE, height=3)
+        self.footer = tk.Label(self.sidebar, text="Arrêt d'urgence\nCtrl + Alt + Maj + X", bg=SIDEBAR,
+                               fg=MUTED, font=("Segoe UI", 8), justify="left")
         self.nav_box = tk.Frame(self.sidebar, bg=SIDEBAR)
         self.nav_box.pack(fill="both", expand=True, padx=10, pady=8)
         self.nav_buttons = {}
         for key, icon, title in PAGES:
-            btn = tk.Button(self.nav_box, text=f"  {icon}   {title}", command=lambda k=key: self._show(k),
-                            anchor="w", relief="flat", bd=0, cursor="hand2", bg=SIDEBAR, fg="white",
-                            activebackground=SIDEBAR_HOVER, activeforeground="white",
-                            font=("Segoe UI", 11, "bold"), padx=10, pady=8)
+            btn = RoundButton(self.nav_box, f"{icon}   {title}", lambda k=key: self._show(k),
+                              fill=SIDEBAR, hover=SIDEBAR_HOVER, fg=TEXT, size=11, radius=12,
+                              anchor="w", padx=14, pady=9)
             btn.pack(fill="x", pady=3)
-            btn.bind("<Enter>", lambda e, b=btn, k=key: b.configure(
-                bg=ORANGE if self._active == k else SIDEBAR_HOVER,
-                fg=BTN_TEXT if self._active == k else "white"))
-            btn.bind("<Leave>", lambda e, b=btn, k=key: self._paint_nav(b, k))
             self.nav_buttons[key] = btn
+        self.page_icons = {key: icon for key, icon, _title in PAGES}
 
         self.main = tk.Frame(root, bg=BG)
         canvas = tk.Canvas(self.main, bg=BG, highlightthickness=0)
@@ -1385,7 +1517,7 @@ class PrankBoxApp:
         canvas.configure(yscrollcommand=scrollbar.set)
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-        canvas.bind("<MouseWheel>", lambda e: canvas.yview_scroll(int(-e.delta / 120), "units"))
+        root.bind_all("<MouseWheel>", self._on_wheel)
         self.canvas = canvas
 
         self.pages = {}
@@ -1400,6 +1532,7 @@ class PrankBoxApp:
             page = tk.Frame(self.body, bg=BG)
             self.pages[key] = page
             self.page = page
+            self.page_key = key
             tk.Frame(page, bg=BG, height=8).pack(fill="x")
             builders[key]()
         self._pack_shell(True)
@@ -1408,9 +1541,14 @@ class PrankBoxApp:
 
     def _paint_nav(self, btn, key):
         on = self._active == key
-        btn.configure(bg=ORANGE if on else SIDEBAR, fg=BTN_TEXT if on else "white",
-                      activebackground=ORANGE if on else SIDEBAR_HOVER,
-                      activeforeground=BTN_TEXT if on else "white")
+        btn.configure(fill=ORANGE if on else SIDEBAR, hover=ORANGE_HOVER if on else SIDEBAR_HOVER,
+                      fg=BTN_TEXT if on else TEXT)
+
+    def _on_wheel(self, event):
+        widget = event.widget
+        if isinstance(widget, (tk.Listbox, tk.Text)) or not str(widget).startswith(str(self.main)):
+            return
+        self.canvas.yview_scroll(int(-event.delta / 120), "units")
 
     def _show(self, key):
         self._active = key
@@ -1424,46 +1562,92 @@ class PrankBoxApp:
     def _pack_shell(self, wide):
         self.sidebar.pack_forget()
         self.main.pack_forget()
+        for label in (self.brand_title, self.brand_tag, self.brand_version, self.brand_line, self.footer):
+            label.pack_forget()
         if wide:
+            self.brand_line.pack(fill="x", padx=16, pady=(0, 6), after=self.brand)
+            self.footer.pack(side="bottom", anchor="w", padx=18, pady=14, before=self.nav_box)
             self.sidebar.pack_propagate(False)
             self.sidebar.configure(width=232)
             self.sidebar.pack(side="left", fill="y")
             self.main.pack(side="left", fill="both", expand=True)
+            self.brand.pack_configure(padx=16, pady=(18, 8))
+            self.brand_title.configure(font=("Segoe UI Black", 18))
+            self.brand_title.pack(anchor="w")
+            self.brand_tag.pack(anchor="w")
+            self.brand_version.pack(anchor="w")
+            self.nav_box.pack_configure(padx=10, pady=8)
         else:
             self.sidebar.pack_propagate(True)
             self.sidebar.pack(side="top", fill="x")
             self.main.pack(side="top", fill="both", expand=True)
+            self.brand.pack_configure(padx=14, pady=(10, 0))
+            self.brand_title.configure(font=("Segoe UI Black", 15))
+            self.brand_title.pack(side="left")
+            self.brand_version.pack(side="left", padx=(10, 0), pady=(6, 0))
+            self.nav_box.pack_configure(padx=6, pady=(4, 6))
         for key, icon, title in PAGES:
             btn = self.nav_buttons[key]
             btn.pack_forget()
-            btn.configure(text=f"  {icon}   {title}" if wide else icon, anchor="w" if wide else "center",
-                          padx=10 if wide else 6)
-            btn.pack(fill="x", pady=3) if wide else btn.pack(side="left", padx=2, pady=6)
+            btn.configure(text=f"{icon}   {title}" if wide else icon, anchor="w" if wide else "center",
+                          padx=14 if wide else 6)
+            if wide:
+                btn.pack(fill="x", pady=3)
+            else:
+                btn.pack(side="left", expand=True, fill="x", padx=2, pady=2)
 
     def _on_root_resize(self, event):
         if event.widget is not self.root or event.width < 100:
             return
         wide = event.width >= 860
-        cols = 3 if event.width >= (1080 if wide else 760) else 2 if event.width >= 560 else 1
+        compact = event.width < 640
+        cols = 3 if event.width >= (1080 if wide else 700) else 2 if event.width >= 360 else 1
         if wide != self._wide:
             self._wide = wide
             self._pack_shell(wide)
+        if compact != self._compact:
+            self._compact = compact
+            for widget, roomy, narrow in self._responsive:
+                widget.grid(**(narrow if compact else roomy))
+            for outer in self._cards:
+                outer.pack_configure(padx=6 if compact else 12)
+            if getattr(self, "stop_button", None):
+                self.stop_button.configure(text="STOP — tout annuler" if compact
+                                           else "STOP — annuler les effets chez tout le monde")
         if cols != self._cols:
             self._cols = cols
             for parent, buttons, row in self._flows:
                 self._place_buttons(parent, buttons, row, cols)
-        if getattr(self, "status_label", None):
-            self.status_label.configure(wraplength=max(200, event.width - (280 if wide else 48)))
+        room = event.width - (300 if wide else 70)
+        for label in self._wraps:
+            label.configure(wraplength=max(160, room))
+
+    def _place(self, widget, roomy, narrow=None, **common):
+        """Place un élément dans la grille, avec une autre position quand la fenêtre est étroite."""
+        roomy = {"columnspan": 1, **common, **roomy}
+        narrow = {"columnspan": 1, **common, **(narrow or {})} if narrow else roomy
+        self._responsive.append((widget, roomy, narrow))
+        widget.grid(**(narrow if self._compact else roomy))
+        return widget
+
+    def _wrap(self, label):
+        self._wraps.append(label)
+        return label
 
     def _card(self, title):
-        outer = tk.Frame(self.page, bg=CARD, highlightbackground=CARD_BORDER, highlightthickness=1)
-        outer.pack(fill="x", padx=12, pady=7)
-        head = tk.Frame(outer, bg=CARD)
-        head.pack(fill="x", padx=12, pady=(10, 6))
-        tk.Frame(head, bg=ORANGE, width=4, height=22).pack(side="left", padx=(0, 10))
-        tk.Label(head, text=title, bg=CARD, fg=TEXT, font=("Segoe UI", 13, "bold")).pack(side="left")
-        inner = tk.Frame(outer, bg=CARD)
-        inner.pack(fill="x", padx=10, pady=(0, 12))
+        outer = RoundCard(self.page)
+        outer.pack(fill="x", padx=6 if self._compact else 12, pady=7)
+        self._cards.append(outer)
+        head = tk.Frame(outer.inner, bg=CARD)
+        head.pack(fill="x", padx=10, pady=(8, 8))
+        badge = tk.Canvas(head, width=34, height=34, bg=CARD, highlightthickness=0, bd=0)
+        round_rect(badge, 1, 1, 33, 33, 10, fill=ORANGE, outline="")
+        badge.create_text(17, 17, text=self.page_icons.get(self.page_key, "★"), fill=BTN_TEXT,
+                          font=("Segoe UI", 12, "bold"))
+        badge.pack(side="left", padx=(0, 12))
+        tk.Label(head, text=title, bg=CARD, fg=TEXT, font=("Segoe UI", 14, "bold")).pack(side="left")
+        inner = tk.Frame(outer.inner, bg=CARD)
+        inner.pack(fill="x", padx=6, pady=(0, 8))
         for col in range(6):
             inner.columnconfigure(col, weight=1)
         return inner
@@ -1484,16 +1668,25 @@ class PrankBoxApp:
             btn.grid(row=row + r, column=col, sticky="ew", padx=4, pady=4)
 
     def _hint(self, parent, text, row):
-        tk.Label(parent, text=text, bg=CARD, fg=MUTED, font=("Segoe UI", 9), wraplength=420,
-                 justify="left").grid(row=row, column=0, columnspan=6, sticky="ew", padx=4, pady=(8, 2))
+        self._wrap(tk.Label(parent, text=text, bg=CARD, fg=MUTED, font=("Segoe UI", 9), wraplength=420,
+                            justify="left")).grid(row=row, column=0, columnspan=6, sticky="w", padx=4,
+                                                  pady=(8, 2))
+
+    def _field_row(self, field, button, row, **field_opts):
+        """Champ + bouton : un tiers pour le bouton en large, la moitié en étroit."""
+        self._place(field, {"row": row, "column": 0, "columnspan": 2},
+                    {"row": row, "column": 0, "columnspan": 4},
+                    sticky="ew", padx=4, pady=4, **field_opts)
+        self._place(button, {"row": row, "column": 2}, {"row": row, "column": 4, "columnspan": 2},
+                    sticky="ew", padx=4, pady=4)
 
     def _build_screen_card(self):
         card = self._card("Effets à l'écran")
         row = self._button_grid(card, SCREEN_EFFECTS)
-        make_button(card, "Farce aléatoire", self.random_prank, bg=DARK_BTN, hover=DARK_BTN_HOVER,
-                    fg=TEXT).grid(row=row, column=0, columnspan=2, sticky="ew", padx=4, pady=(10, 4))
+        random_btn = make_button(card, "Farce aléatoire", self.random_prank, bg=DARK_BTN,
+                                 hover=DARK_BTN_HOVER, fg=TEXT)
         delay_box = tk.Frame(card, bg=CARD)
-        delay_box.grid(row=row, column=2, sticky="ew", padx=4, pady=(4, 4))
+        self._field_row(random_btn, delay_box, row)
         tk.Label(delay_box, text="Différé (min)", bg=CARD, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w")
         self.delay_spin = tk.Spinbox(delay_box, from_=0, to=120, width=5, bg=INPUT_BG, fg=TEXT,
                                      buttonbackground=DARK_BTN, insertbackground=TEXT, relief="flat",
@@ -1507,37 +1700,43 @@ class PrankBoxApp:
         self._hint(card, "Touche à appuyer (G, espace, F1, clic droit…)", row)
         self.key_entry = make_entry(card, width=8)
         self.key_entry.insert(0, "G")
-        self.key_entry.grid(row=row + 1, column=0, sticky="ew", padx=4, pady=4, ipady=6)
+        self._place(self.key_entry, {"row": row + 1, "column": 0}, {"row": row + 1, "column": 0, "columnspan": 2},
+                    sticky="ew", padx=4, pady=4, ipady=6)
         hold_box = tk.Frame(card, bg=CARD)
-        hold_box.grid(row=row + 1, column=1, sticky="ew", padx=4)
+        self._place(hold_box, {"row": row + 1, "column": 1}, {"row": row + 1, "column": 2, "columnspan": 2},
+                    sticky="ew", padx=4)
         tk.Label(hold_box, text="Maintenir (s)", bg=CARD, fg=MUTED, font=("Segoe UI", 8)).pack(anchor="w")
         self.hold_spin = tk.Spinbox(hold_box, from_=0, to=10, increment=0.5, width=5, bg=INPUT_BG, fg=TEXT,
                                     buttonbackground=DARK_BTN, insertbackground=TEXT, relief="flat",
                                     font=("Segoe UI", 11))
         self.hold_spin.pack(fill="x", ipady=2)
-        make_button(card, "Appuyer", self.send_key).grid(row=row + 1, column=2, sticky="ew", padx=4, pady=4)
+        self._place(make_button(card, "Appuyer", self.send_key),
+                    {"row": row + 1, "column": 2}, {"row": row + 1, "column": 4, "columnspan": 2},
+                    sticky="ew", padx=4, pady=4)
 
         self._hint(card, "Chat en jeu (ouvre le chat, tape, envoie)", row + 2)
         self.chat_entry = make_entry(card)
-        self.chat_entry.grid(row=row + 3, column=0, columnspan=2, sticky="ew", padx=4, pady=4, ipady=6)
         self.chat_entry.bind("<Return>", lambda e: self.send_chat())
-        make_button(card, "Envoyer", self.send_chat, bg=DARK_BTN, hover=DARK_BTN_HOVER, fg=TEXT).grid(
-            row=row + 3, column=2, sticky="ew", padx=4, pady=4)
-        tk.Label(card, text="Touche pour ouvrir le chat (vide = aucune) :", bg=CARD, fg=MUTED,
-                 font=("Segoe UI", 8)).grid(row=row + 4, column=0, columnspan=2, sticky="w", padx=4)
+        self._field_row(self.chat_entry, make_button(card, "Envoyer", self.send_chat, bg=DARK_BTN,
+                                                     hover=DARK_BTN_HOVER, fg=TEXT), row + 3, ipady=6)
+        chat_key_label = tk.Label(card, text="Touche pour ouvrir le chat (vide = aucune) :", bg=CARD, fg=MUTED,
+                                  font=("Segoe UI", 8))
         self.chat_key_entry = make_entry(card, width=8)
         self.chat_key_entry.insert(0, "entrée")
-        self.chat_key_entry.grid(row=row + 4, column=2, sticky="ew", padx=4, pady=4, ipady=3)
+        self._place(chat_key_label, {"row": row + 4, "column": 0, "columnspan": 2},
+                    {"row": row + 4, "column": 0, "columnspan": 4}, sticky="w", padx=4)
+        self._place(self.chat_key_entry, {"row": row + 4, "column": 2},
+                    {"row": row + 4, "column": 4, "columnspan": 2}, sticky="ew", padx=4, pady=4, ipady=3)
 
     def _build_chaos_card(self):
         card = self._card("Chaos écran")
         row = self._button_grid(card, CHAOS_EFFECTS)
         self._hint(card, "Message géant à l'écran", row)
         self.message_entry = make_entry(card)
-        self.message_entry.grid(row=row + 1, column=0, columnspan=2, sticky="ew", padx=4, pady=4, ipady=6)
         self.message_entry.bind("<Return>", lambda e: self.send_text("message", self.message_entry))
-        make_button(card, "Afficher", lambda: self.send_text("message", self.message_entry), bg=DARK_BTN,
-                    hover=DARK_BTN_HOVER, fg=TEXT).grid(row=row + 1, column=2, sticky="ew", padx=4, pady=4)
+        self._field_row(self.message_entry,
+                        make_button(card, "Afficher", lambda: self.send_text("message", self.message_entry),
+                                    bg=DARK_BTN, hover=DARK_BTN_HOVER, fg=TEXT), row + 1, ipady=6)
 
     def _build_fun_card(self):
         card = self._card("Trucs marrants")
@@ -1546,10 +1745,10 @@ class PrankBoxApp:
         row = self._button_grid(card, FUN_EFFECTS, row=1)
         self._hint(card, "Faire parler le PC (voix de Windows)", row)
         self.speak_entry = make_entry(card)
-        self.speak_entry.grid(row=row + 1, column=0, columnspan=2, sticky="ew", padx=4, pady=4, ipady=6)
         self.speak_entry.bind("<Return>", lambda e: self.send_text("parler", self.speak_entry))
-        make_button(card, "Parler", lambda: self.send_text("parler", self.speak_entry), bg=DARK_BTN,
-                    hover=DARK_BTN_HOVER, fg=TEXT).grid(row=row + 1, column=2, sticky="ew", padx=4, pady=4)
+        self._field_row(self.speak_entry,
+                        make_button(card, "Parler", lambda: self.send_text("parler", self.speak_entry),
+                                    bg=DARK_BTN, hover=DARK_BTN_HOVER, fg=TEXT), row + 1, ipady=6)
 
     def _build_log_card(self):
         card = self._card("Journal")
@@ -1559,79 +1758,102 @@ class PrankBoxApp:
 
     def _build_salon_card(self):
         card = self._card("Salon")
-        for row, (label, var, font) in enumerate((("Ton pseudo", self.name_var, ("Segoe UI", 11)),
-                                                  ("Code du salon", self.room_var, ("Consolas", 15, "bold")))):
-            tk.Label(card, text=label, bg=CARD, fg=MUTED, font=("Segoe UI", 9)).grid(
-                row=row, column=0, sticky="w", padx=4, pady=3)
+        # Les lignes vont de 10 en 10 : en étroit, chaque ligne peut s'étaler sur la suivante.
+        for index, (label, var, font) in enumerate((("Ton pseudo", self.name_var, ("Segoe UI", 11)),
+                                                    ("Code du salon", self.room_var, ("Consolas", 15, "bold")))):
+            row = index * 10
+            self._place(tk.Label(card, text=label, bg=CARD, fg=MUTED, font=("Segoe UI", 9)),
+                        {"row": row, "column": 0}, {"row": row, "column": 0, "columnspan": 6},
+                        sticky="w", padx=4, pady=3)
             entry = make_entry(card, textvariable=var)
-            entry.configure(font=font, fg=ORANGE if row else TEXT)
-            entry.grid(row=row, column=1, columnspan=1 if row else 2, sticky="ew", padx=4, pady=3, ipady=4)
+            entry.configure(font=font, fg=ORANGE if index else TEXT)
+            self._place(entry, {"row": row, "column": 1, "columnspan": 1 if index else 2},
+                        {"row": row + 1, "column": 0, "columnspan": 4 if index else 6},
+                        sticky="ew", padx=4, pady=3, ipady=4)
         # Code masqué par défaut : il ne doit pas apparaître en stream ou en partage d'écran.
         self.room_entry = entry
         entry.configure(show="•")
         self.reveal_button = make_button(card, "Afficher", self.toggle_room_visibility, bg=DARK_BTN,
                                          hover=DARK_BTN_HOVER, fg=TEXT, size=9)
-        self.reveal_button.grid(row=1, column=2, sticky="ew", padx=4, pady=3)
-        make_button(card, "Rejoindre", self.join).grid(row=2, column=0, sticky="ew", padx=4, pady=(6, 4))
-        make_button(card, "Nouveau salon", self.new_room, bg=DARK_BTN, hover=DARK_BTN_HOVER, fg=TEXT,
-                    size=9).grid(row=2, column=1, sticky="ew", padx=4, pady=(6, 4))
-        make_button(card, "Copier le code", self.copy_room, bg=DARK_BTN, hover=DARK_BTN_HOVER, fg=TEXT,
-                    size=9).grid(row=2, column=2, sticky="ew", padx=4, pady=(6, 4))
-        self.status_label = tk.Label(card, textvariable=self.status_var, bg=CARD, fg=TEXT,
-                                     font=("Segoe UI", 9, "bold"), wraplength=640, justify="left")
-        self.status_label.grid(row=3, column=0, columnspan=6, sticky="ew", padx=4)
+        self._place(self.reveal_button, {"row": 10, "column": 2}, {"row": 11, "column": 4, "columnspan": 2},
+                    sticky="ew", padx=4, pady=3)
+        self._place(make_button(card, "Rejoindre", self.join),
+                    {"row": 20, "column": 0}, {"row": 20, "column": 0, "columnspan": 6},
+                    sticky="ew", padx=4, pady=(6, 4))
+        self._place(make_button(card, "Nouveau salon", self.new_room, bg=DARK_BTN, hover=DARK_BTN_HOVER,
+                                fg=TEXT, size=9),
+                    {"row": 20, "column": 1}, {"row": 21, "column": 0, "columnspan": 3},
+                    sticky="ew", padx=4, pady=(6, 4))
+        self._place(make_button(card, "Copier le code", self.copy_room, bg=DARK_BTN, hover=DARK_BTN_HOVER,
+                                fg=TEXT, size=9),
+                    {"row": 20, "column": 2}, {"row": 21, "column": 3, "columnspan": 3},
+                    sticky="ew", padx=4, pady=(6, 4))
+        self.status_label = self._wrap(tk.Label(card, textvariable=self.status_var, bg=CARD, fg=TEXT,
+                                                font=("Segoe UI", 9, "bold"), wraplength=640, justify="left"))
+        self.status_label.grid(row=30, column=0, columnspan=6, sticky="w", padx=4)
 
         self.count_var = tk.StringVar(value="Personne d'autre dans le salon")
         self.you_var = tk.StringVar(value="Toi  ·  pas dans un salon")
         tk.Label(card, textvariable=self.you_var, bg=CARD, fg=ORANGE,
-                 font=("Segoe UI Emoji", 10, "bold")).grid(row=4, column=0, columnspan=6, sticky="w", padx=4,
+                 font=("Segoe UI Emoji", 10, "bold")).grid(row=40, column=0, columnspan=6, sticky="w", padx=4,
                                                            pady=(8, 0))
         tk.Label(card, textvariable=self.count_var, bg=CARD, fg=TEXT,
-                 font=("Segoe UI", 10, "bold")).grid(row=5, column=0, columnspan=6, sticky="w", padx=4)
+                 font=("Segoe UI", 10, "bold")).grid(row=50, column=0, columnspan=6, sticky="w", padx=4)
         self.members_box = tk.Listbox(card, height=6, selectmode="multiple", exportselection=False,
                                       bg=INPUT_BG, fg=TEXT, selectbackground=ORANGE,
                                       selectforeground=BTN_TEXT, relief="flat", highlightthickness=0,
                                       font=("Segoe UI Emoji", 12), activestyle="none")
-        self.members_box.grid(row=6, column=0, columnspan=6, sticky="ew", padx=4, pady=4)
-        tk.Label(card, text="👑 = chef. Aucune sélection = tout le monde sauf toi.",
-                 bg=CARD, fg=MUTED, font=("Segoe UI Emoji", 8), justify="left").grid(
-            row=7, column=0, columnspan=6, sticky="w", padx=4)
-        tk.Label(card, textvariable=self.cooldown_var, bg=CARD, fg=MUTED,
-                 font=("Segoe UI", 9)).grid(row=8, column=0, columnspan=3, sticky="w", padx=4, pady=(8, 0))
+        self.members_box.grid(row=60, column=0, columnspan=6, sticky="ew", padx=4, pady=4)
+        self._wrap(tk.Label(card, text="👑 = chef. Aucune sélection = tout le monde sauf toi.",
+                            bg=CARD, fg=MUTED, font=("Segoe UI Emoji", 8), justify="left")).grid(
+            row=70, column=0, columnspan=6, sticky="w", padx=4)
+        self._place(tk.Label(card, textvariable=self.cooldown_var, bg=CARD, fg=MUTED, font=("Segoe UI", 9)),
+                    {"row": 80, "column": 0, "columnspan": 3}, {"row": 80, "column": 0, "columnspan": 6},
+                    sticky="w", padx=4, pady=(8, 0))
         self.cooldown_spin = tk.Spinbox(card, from_=0, to=120, width=5, bg=INPUT_BG, fg=TEXT,
                                         buttonbackground=DARK_BTN, insertbackground=TEXT, relief="flat",
                                         font=("Segoe UI", 11))
-        self.cooldown_spin.grid(row=8, column=3, sticky="ew", padx=4, pady=(8, 0), ipady=2)
-        make_button(card, "Appliquer", self.apply_cooldown, bg=DARK_BTN, hover=DARK_BTN_HOVER,
-                    fg=TEXT, size=9).grid(row=8, column=4, columnspan=2, sticky="ew", padx=4, pady=(8, 0))
-        make_button(card, "Exclure", self.exclude_selected, bg=RED, hover=RED_HOVER, fg=TEXT, size=9).grid(
-            row=9, column=0, sticky="ew", padx=4, pady=4)
-        make_button(card, "Promouvoir chef", self.promote_selected, bg=DARK_BTN, hover=DARK_BTN_HOVER,
-                    fg=TEXT, size=9).grid(row=9, column=1, columnspan=3, sticky="ew", padx=4, pady=4)
-        make_button(card, "Retirer chef", self.demote_selected, bg=DARK_BTN, hover=DARK_BTN_HOVER,
-                    fg=TEXT, size=9).grid(row=9, column=4, columnspan=2, sticky="ew", padx=4, pady=4)
+        self._place(self.cooldown_spin, {"row": 80, "column": 3, "pady": (8, 0)},
+                    {"row": 81, "column": 0, "columnspan": 3, "pady": 4}, sticky="ew", padx=4, ipady=2)
+        self._place(make_button(card, "Appliquer", self.apply_cooldown, bg=DARK_BTN, hover=DARK_BTN_HOVER,
+                                fg=TEXT, size=9),
+                    {"row": 80, "column": 4, "columnspan": 2, "pady": (8, 0)},
+                    {"row": 81, "column": 3, "columnspan": 3, "pady": 4}, sticky="ew", padx=4)
+        self._place(make_button(card, "Exclure", self.exclude_selected, bg=RED, hover=RED_HOVER, fg=TEXT,
+                                size=9),
+                    {"row": 90, "column": 0}, {"row": 90, "column": 0, "columnspan": 6},
+                    sticky="ew", padx=4, pady=4)
+        self._place(make_button(card, "Promouvoir chef", self.promote_selected, bg=DARK_BTN,
+                                hover=DARK_BTN_HOVER, fg=TEXT, size=9),
+                    {"row": 90, "column": 1, "columnspan": 3}, {"row": 91, "column": 0, "columnspan": 3},
+                    sticky="ew", padx=4, pady=4)
+        self._place(make_button(card, "Retirer chef", self.demote_selected, bg=DARK_BTN, hover=DARK_BTN_HOVER,
+                                fg=TEXT, size=9),
+                    {"row": 90, "column": 4, "columnspan": 2}, {"row": 91, "column": 3, "columnspan": 3},
+                    sticky="ew", padx=4, pady=4)
         for row, (text, var) in enumerate((("M'inclure aussi (pour tester)", self.include_me),
-                                           ("Bloquer les farces qu'on m'envoie", self.blocked)), start=10):
+                                           ("Bloquer les farces qu'on m'envoie", self.blocked))):
             tk.Checkbutton(card, text=text, variable=var, bg=CARD, fg=TEXT, selectcolor=INPUT_BG,
                            activebackground=CARD, activeforeground=TEXT, font=("Segoe UI", 9)).grid(
-                row=row, column=0, columnspan=6, sticky="w")
+                row=100 + row * 10, column=0, columnspan=6, sticky="w")
         tk.Label(card, text="Volume des farces reçues (0 = muet)", bg=CARD, fg=MUTED,
-                 font=("Segoe UI", 9)).grid(row=12, column=0, columnspan=6, sticky="w", padx=4, pady=(8, 0))
-        tk.Scale(card, from_=0, to=100, orient="horizontal", variable=self.volume_var, command=self.on_volume,
-                 bg=CARD, fg=TEXT, troughcolor=INPUT_BG, activebackground=ORANGE, highlightthickness=0,
-                 bd=0, sliderrelief="flat", font=("Segoe UI", 8)).grid(
-            row=13, column=0, columnspan=5, sticky="ew", padx=4)
-        make_button(card, "Tester", self.test_volume, bg=DARK_BTN, hover=DARK_BTN_HOVER, fg=TEXT,
-                    size=9).grid(row=13, column=5, sticky="ew", padx=4, pady=(4, 0))
-        tk.Label(card, textvariable=self.received_var, bg=CARD, fg=ORANGE, font=("Segoe UI", 9, "bold"),
-                 wraplength=640, justify="left").grid(row=14, column=0, columnspan=6, sticky="ew", padx=4,
-                                                      pady=(4, 0))
-        make_button(card, "STOP — annuler les effets chez tout le monde", self.stop_all,
-                    bg=RED, hover=RED_HOVER, fg=TEXT).grid(
-            row=15, column=0, columnspan=6, sticky="ew", padx=4, pady=(8, 0))
+                 font=("Segoe UI", 9)).grid(row=120, column=0, columnspan=6, sticky="w", padx=4, pady=(8, 0))
+        self._place(RoundSlider(card, self.volume_var, self.on_volume),
+                    {"row": 130, "column": 0, "columnspan": 5}, {"row": 130, "column": 0, "columnspan": 4},
+                    sticky="ew", padx=4)
+        self._place(make_button(card, "Tester", self.test_volume, bg=DARK_BTN, hover=DARK_BTN_HOVER, fg=TEXT,
+                                size=9),
+                    {"row": 130, "column": 5}, {"row": 130, "column": 4, "columnspan": 2},
+                    sticky="ew", padx=4, pady=(4, 0))
+        self._wrap(tk.Label(card, textvariable=self.received_var, bg=CARD, fg=ORANGE,
+                            font=("Segoe UI", 9, "bold"), wraplength=640, justify="left")).grid(
+            row=140, column=0, columnspan=6, sticky="w", padx=4, pady=(4, 0))
+        self.stop_button = make_button(card, "STOP — annuler les effets chez tout le monde", self.stop_all,
+                                       bg=RED, hover=RED_HOVER, fg=TEXT)
+        self.stop_button.grid(row=150, column=0, columnspan=6, sticky="ew", padx=4, pady=(8, 0))
         make_button(card, "Ajouter des images et des sons", self.open_addons,
                     bg=DARK_BTN, hover=DARK_BTN_HOVER, fg=TEXT, size=9).grid(
-            row=16, column=0, columnspan=6, sticky="ew", padx=4, pady=(8, 0))
+            row=160, column=0, columnspan=6, sticky="ew", padx=4, pady=(8, 0))
 
     # ---------- actions
 
