@@ -108,7 +108,7 @@ RANDOM_POOL = [cmd for _, cmd in
 HOST_PORT = 47777
 # À augmenter quand le protocole change. Le salon refuse toute autre valeur.
 PROTOCOL = 4
-APP_RELEASE = 6  # numéro du .exe, écrit par tools/publier.py avant de le construire
+APP_RELEASE = 7  # numéro du .exe, écrit par tools/publier.py avant de le construire
 MAX_FRAME = 4_000_000
 ROLE_LABEL = {"hote": "hôte", "chef": "chef", "membre": "membre"}
 PAGES = [

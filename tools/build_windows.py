@@ -41,17 +41,21 @@ def package(dest_root=None):
 
 
 def _package(dest_root, images, source):
+    work = os.path.join(ROOT, "build", "release")
+    os.makedirs(work, exist_ok=True)
+    spec = os.path.join(work, "PrankBox.spec")
+    with open(spec, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(_spec_text(source, images))
+    upx = os.path.join(os.environ.get("LOCALAPPDATA", ""), "PrankBox", "upx", "upx-4.2.4-win64")
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--noconfirm", "--clean", "--windowed", "--onefile",
-        "--name", "PrankBox",
+        "--noconfirm", "--clean",
         "--distpath", dest_root,
-        "--workpath", os.path.join(ROOT, "build", "release"),
-        "--specpath", os.path.join(ROOT, "build", "release"),
+        "--workpath", work,
     ]
-    if images is not None:
-        cmd.append(f"--add-data={images}{os.pathsep}images")
-    cmd.append(source)
+    if os.path.isfile(os.path.join(upx, "upx.exe")):
+        cmd.append(f"--upx-dir={upx}")
+    cmd.append(spec)
     subprocess.run(cmd, cwd=ROOT, check=True)
 
     exe = os.path.join(dest_root, "PrankBox.exe")
@@ -67,6 +71,73 @@ def _package(dest_root, images, source):
     with open(zip_path, "rb") as f:
         digest = hashlib.sha256(f.read()).hexdigest()
     return zip_path, digest
+
+
+def _spec_text(source, images):
+    datas = [(images, "images")] if images else []
+    return f"""# -*- mode: python ; coding: utf-8 -*-
+import os
+
+a = Analysis(
+    [{source!r}],
+    pathex=[],
+    binaries=[],
+    datas={datas!r},
+    hiddenimports=[],
+    hookspath=[],
+    hooksconfig={{}},
+    runtime_hooks=[],
+    excludes=["pydoc", "doctest", "unittest", "ensurepip", "venv", "lib2to3", "xmlrpc", "pydoc_data"],
+    noarchive=False,
+    optimize=2,
+)
+
+_ENCODINGS = {{"cp1252.enc", "iso8859-1.enc", "iso8859-15.enc", "ascii.enc"}}
+_MSGS = {{"fr.msg", "en.msg", "en_us.msg", "en_gb.msg"}}
+
+def _keep_data(item):
+    name = item[0].replace("\\\\", "/")
+    if name.startswith("_tcl_data/tzdata/"):
+        return False
+    if name.startswith("_tcl_data/encoding/"):
+        return os.path.basename(name).lower() in _ENCODINGS
+    if "/msgs/" in name:
+        return os.path.basename(name).lower() in _MSGS
+    if name.startswith("_tk_data/images/") or name.startswith("_tk_data/demos/") or "/demos/" in name:
+        return False
+    if "tcltest" in name.lower():
+        return False
+    return True
+
+def _keep_bin(item):
+    base = os.path.basename(item[0]).lower()
+    return base != "ucrtbase.dll" and not base.startswith("api-ms-win-")
+
+a.datas = [item for item in a.datas if _keep_data(item)]
+a.binaries = [item for item in a.binaries if _keep_bin(item)]
+
+pyz = PYZ(a.pure)
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name="PrankBox",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+"""
 
 
 def _is_third_party(name):
