@@ -1,7 +1,11 @@
 __pycache__/
+build/
+dist/
+*.spec
 *.maj
 *.rar
 prankbox_config.json
+.prankbox_release
 captures/
 
 # Contenus de tiers : restent en local, jamais dans le dépôt public

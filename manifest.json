@@ -1,23 +1,25 @@
 {
  "files": {
   ".gitattributes": "c5b0bcb2cd0166e9e033413d4fda7e686c6ef751b3f7dd0ff35306d95f2c1b20",
-  ".gitignore": "2183a74b051d5466148ff9a5f7276df19c62165aa0e27765cc1d473f181413a2",
-  "README.md": "0625a6b1c012c05e10ab858cee6cd6c5c3958a8fc8254457e694a5799323ce49",
+  ".gitignore": "37322d5db4daa675310bcbdbb707520e0e59020edb8b09a1055c1be58975fcdb",
+  "README.md": "f43e5fe5cd72547025826f75beca4fa5b819438bb32f5613cfc3a1af12691caf",
   "docs/screenshots/ecran.png": "a5d1af08a04ec070df3728bb1cf0336f3814ae5f70e3377bb4f0c729093bac52",
   "docs/screenshots/fun.png": "982092046d99dff5a987acb522dc942e0ceb0c17793206847a9671e5996e20e4",
   "docs/screenshots/salon.png": "8a790f16ab7c37f0421cb9913a3e248d819379e7604b568c5ae570799cc9a924",
-  "effects.py": "8e4f76bb9d0e04d49b1ade284b81be81f9d6ba4fde5879e7ec87c4aa0cbc7eda",
+  "effects.py": "98cc4e4ce9bb8aad7016dddc44b2cb5e83b814a6a8e4a2a3dd1c2be21276d316",
   "images/pieds1.png": "40983899af08bfc6a63c7d8094f8eff12ef2bb03f150f9b28411c71caf305b21",
   "images/pieds2.png": "ad622b7f61d651ccb8104746cdeeec7f9e97cf173bb05d73c56d7a6ca0739fd4",
   "images/pieds3.png": "89313520767c4ee9f926cba35b40a7733282b8bf4d4928082866ac49cc1d6193",
   "images/screamer.png": "6ce1f6ed0b8e43a5fc8047d51a753fbf85bf9b3ed3b017adde6c3faacde52b11",
   "images/screamer2.png": "434bf1daf31df226c818ad9a046ab6840bc818be8027662cd20f2f73a874acb3",
   "images/screamer3.png": "4153b98264eaac9e31ba0dbc10b372eed8d1e49e4aa6f5a63d5d16109f128f4c",
-  "prankbox.py": "15ee161f8de2cd0405ae53f6046f1332f155bd02496b5dff416e4be4f951e307",
+  "prankbox.py": "9222bb9ec52229dbd3bb0db28d04d0cca700d85cd10a6f9eda821f1a09e53a44",
   "signature.py": "7a74b7e513073e11fe3b35bb97f1152bbde93ea6a0a060a7aee27581ba58a548",
-  "tools/publier.py": "01bc2708e7a59e618a780fcc5513fe9f37cb4857d6cdc2bc405ae881e648ea18",
+  "tools/build_windows.py": "3f49166d2a9c963971861e2b819d5885e6ead8a6a7c2dae5afbb22dd885ece86",
+  "tools/publier.py": "be223d9152d3a35b6154c56893e1653f69f997986348f97520adff97d18b1d8b",
   "tools/render_poro.py": "2d14167970ffa437589cf887b57e4b3d020d46559a6d297948f3aa02dac159c1",
-  "updater.py": "d5d929ab2961f685c874306d97eff68626b42b7e50202f9f078c37171e64fc4d"
+  "updater.py": "47e76959191c8aabbf71e79c55831b84dce5edb9024877e1a43bdc12c32baff9",
+  "windows.json": "ee6f4392ac8949753d25267db7cb4d8d84766b5aff443a81002fb632ff11d121"
  },
- "version": 4
+ "version": 5
 }

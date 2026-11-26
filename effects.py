@@ -28,7 +28,8 @@ import winsound
 from ctypes import wintypes
 from dataclasses import dataclass
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# Dans le .exe, images et sons sont à côté du programme empaqueté, pas du script.
+HERE = sys._MEIPASS if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 SOUNDS_DIR = os.path.join(HERE, "sounds")
 IMAGES_DIR = os.path.join(HERE, "images")
 GAME_BG = "#0f1923"

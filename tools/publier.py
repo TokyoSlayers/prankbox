@@ -8,8 +8,10 @@ garde-en une copie, si tu la perds il faudra redonner les fichiers à la main.
 """
 
 import hashlib
+import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -25,6 +27,36 @@ def git(*args):
     return subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout
 
 
+def _set_release(version):
+    path = os.path.join(ROOT, "prankbox.py")
+    with open(path, encoding="utf-8", newline="") as f:
+        text = f.read()
+    new, count = re.subn(r"(?m)^APP_RELEASE = \d+", f"APP_RELEASE = {version}", text, count=1)
+    if count != 1:
+        sys.exit("APP_RELEASE introuvable dans prankbox.py : publication annulée.")
+    new = new.replace("\r\n", "\n").replace("\n", "\r\n")
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(new)
+
+
+def _write_windows(version, digest):
+    info = {
+        "sha256": digest,
+        "url": f"https://github.com/{updater.REPO}/releases/download/v{version}/PrankBox-windows.zip",
+        "version": version,
+    }
+    with open(os.path.join(ROOT, "windows.json"), "wb") as f:
+        f.write(json.dumps(info, indent=1, sort_keys=True).encode() + b"\n")
+
+
+def _build_windows():
+    spec = importlib.util.spec_from_file_location(
+        "build_windows", os.path.join(ROOT, "tools", "build_windows.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.package()
+
+
 def main():
     message = " ".join(sys.argv[1:]) or "Mise à jour"
     try:
@@ -34,13 +66,19 @@ def main():
         sys.exit(f"Clé privée introuvable ou illisible : {KEY_PATH}")
     if signature.public_key(secret) != updater.PUBLIC_KEY:
         sys.exit("Cette clé privée ne correspond pas à PUBLIC_KEY dans updater.py : publication annulée.")
+    subprocess.run(["gh", "auth", "status"], check=True)
+
+    version = updater.local_version() + 1
+    _set_release(version)
+    zip_path, digest = _build_windows()
+    _write_windows(version, digest)
 
     git("add", "-A")
     files = [f for f in git("ls-files", "-z").split("\0") if f and f not in updater.PROTECTED]
     if not git("status", "--porcelain") and os.path.exists(os.path.join(ROOT, updater.MANIFEST)):
         sys.exit("Rien de nouveau à publier.")
 
-    manifest = {"version": updater.local_version() + 1, "files": {}}
+    manifest = {"version": version, "files": {}}
     for rel in files:
         with open(os.path.join(ROOT, rel), "rb") as f:
             manifest["files"][rel] = hashlib.sha256(f.read()).hexdigest()
@@ -53,8 +91,13 @@ def main():
     git("add", "-A")
     git("commit", "-q", "-m", f"v{manifest['version']} : {message}")
     git("push", "-q", "origin", updater.BRANCH)
+    subprocess.run(
+        ["gh", "release", "create", f"v{version}", zip_path,
+         "--repo", updater.REPO, "--title", f"PrankBox {version}", "--notes", message],
+        check=True,
+    )
     print(f"Version {manifest['version']} publiée ({len(files)} fichiers signés). "
-          "Tes potes la recevront au prochain lancement de PrankBox.")
+          "L'ancienne version téléchargera le programme Windows au prochain lancement.")
 
 
 if __name__ == "__main__":

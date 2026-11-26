@@ -10,8 +10,11 @@ pas pour faire tourner du code chez les autres.
 import hashlib
 import json
 import os
+import shutil
+import subprocess
 import urllib.parse
 import urllib.request
+import zipfile
 
 import signature
 
@@ -56,8 +59,8 @@ def _safe_path(rel):
     return full if os.path.commonpath([full, HERE]) == HERE else None
 
 
-def check(log=print):
-    """Installe la dernière version signée. Renvoie True si des fichiers ont changé (il faut relancer)."""
+def _remote_manifest(log=print):
+    """Manifeste signé de la branche, ou None. Les messages sont ceux de l'ancienne mise à jour."""
     try:
         commit = _get(f"https://api.github.com/repos/{REPO}/commits/{BRANCH}",
                       accept="application/vnd.github.sha").decode().strip()
@@ -69,12 +72,24 @@ def check(log=print):
         sig = bytes.fromhex(_get(raw + MANIFEST_SIG).decode().strip())
     except (OSError, ValueError) as exc:
         log(f"Mise à jour : GitHub injoignable ({exc}), on continue avec la version actuelle.")
-        return False
+        return None
     if not signature.verify(PUBLIC_KEY, manifest_bytes, sig):
         log("Mise à jour REFUSÉE : la signature ne correspond pas à la clé de PrankBox.")
+        return None
+    try:
+        manifest = json.loads(manifest_bytes)
+        return manifest_bytes, sig, int(manifest["version"]), manifest["files"], raw
+    except (ValueError, KeyError, TypeError):
+        log("Mise à jour refusée : manifeste illisible.")
+        return None
+
+
+def check(log=print):
+    """Installe la dernière version signée. Renvoie True si des fichiers ont changé (il faut relancer)."""
+    remote = _remote_manifest(log)
+    if remote is None:
         return False
-    manifest = json.loads(manifest_bytes)
-    version, files = int(manifest["version"]), manifest["files"]
+    manifest_bytes, sig, version, files, raw = remote
     if version <= local_version():
         return False
 
@@ -109,3 +124,208 @@ def check(log=print):
             f.write(data)
     log(f"PrankBox est à jour (version {version}).")
     return bool(pending)
+
+
+def _allowed_url(url):
+    parts = urllib.parse.urlparse(url)
+    prefix = f"/{REPO}/releases/download/"
+    return parts.scheme == "https" and parts.netloc == "github.com" and parts.path.startswith(prefix)
+
+
+def _appdata():
+    return os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "PrankBox")
+
+
+def _install_dir(frozen, script_dir):
+    """Dossier du .exe. Le dépôt git n'est pas écrasé : le programme va dans AppData."""
+    if not frozen and os.path.isdir(os.path.join(script_dir, ".git")):
+        base = os.environ.get("LOCALAPPDATA") or _appdata()
+        return os.path.join(base, "PrankBox", "app")
+    return script_dir
+
+
+def _stamp_ok(folder, digest):
+    exe = os.path.join(folder, "PrankBox.exe")
+    stamp = os.path.join(folder, ".prankbox_release")
+    try:
+        with open(stamp, encoding="utf-8") as f:
+            return os.path.isfile(exe) and f.read().strip() == digest
+    except OSError:
+        return False
+
+
+def windows_plan(frozen, release, log=print):
+    """Décrire le .exe à installer, ou None s'il n'y a rien à faire.
+
+    L'ancienne version Python installe toujours le programme Windows.
+    Le .exe ne le retélécharge que si le numéro signé est plus grand que le sien.
+    """
+    remote = _remote_manifest(log)
+    if remote is None:
+        return None
+    _manifest_bytes, _sig, _version, files, raw = remote
+    digest = files.get("windows.json") if isinstance(files, dict) else None
+    if not isinstance(digest, str):
+        return None
+    try:
+        data = _get(raw + urllib.parse.quote("windows.json"))
+    except OSError as exc:
+        log(f"Mise à jour : programme Windows injoignable ({exc}).")
+        return None
+    if hashlib.sha256(data).hexdigest() != digest:
+        log("Mise à jour refusée : windows.json ne correspond pas à son empreinte signée.")
+        return None
+    try:
+        info = json.loads(data)
+        win_version, url, sha = int(info["version"]), info["url"], info["sha256"]
+    except (ValueError, KeyError, TypeError):
+        log("Mise à jour refusée : description du programme Windows illisible.")
+        return None
+    if not isinstance(url, str) or not _allowed_url(url) or not isinstance(sha, str) or len(sha) != 64:
+        log("Mise à jour refusée : adresse du programme Windows invalide.")
+        return None
+    if win_version <= 0 or (frozen and (release <= 0 or win_version <= release)):
+        return None
+    return {"version": win_version, "url": url, "sha256": sha.lower()}
+
+
+def _migrate_config(script_dir):
+    """Garde le pseudo et le salon : le .exe lit ses réglages dans AppData."""
+    src = os.path.join(script_dir, "prankbox_config.json")
+    if not os.path.isfile(src):
+        return
+    folder = _appdata()
+    os.makedirs(folder, exist_ok=True)
+    dest = os.path.join(folder, "prankbox_config.json")
+    if not os.path.isfile(dest):
+        shutil.copyfile(src, dest)
+
+
+def _extract(zip_path, dest):
+    os.makedirs(dest, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as archive:
+        for info in archive.infolist():
+            name = info.filename.replace("\\", "/")
+            if not name or name.startswith("/") or ":" in name or ".." in name.split("/"):
+                raise ValueError(f"archive refusée : {info.filename!r}")
+        archive.extractall(dest)
+
+
+def _launch(exe):
+    subprocess.Popen([exe], cwd=os.path.dirname(exe))
+
+
+def _remove_python(folder):
+    """Efface les .py de l'ancienne installation. Ne touche pas à un dépôt git, ni au .exe."""
+    if os.path.isdir(os.path.join(folder, ".git")):
+        return
+    caches = []
+    for dirpath, dirnames, filenames in os.walk(folder):
+        kept = []
+        for name in dirnames:
+            if name == "__pycache__":
+                caches.append(os.path.join(dirpath, name))
+            elif name not in (".git", "_internal"):
+                kept.append(name)
+        dirnames[:] = kept
+        for name in filenames:
+            if name.endswith((".py", ".pyc")):
+                try:
+                    os.remove(os.path.join(dirpath, name))
+                except OSError:
+                    pass
+    for cache in caches:
+        shutil.rmtree(cache, ignore_errors=True)
+
+
+def _schedule_replace(stage, dest, pid):
+    """Remplace le .exe en cours après sa fermeture : Windows interdit de l'écraser avant."""
+    maj = os.path.join(_appdata(), "maj")
+    os.makedirs(maj, exist_ok=True)
+    script = os.path.join(maj, "remplacer.ps1")
+
+    def ps(path):
+        return path.replace("'", "''")
+
+    text = (
+        f"Wait-Process -Id {int(pid)} -ErrorAction SilentlyContinue\r\n"
+        "Start-Sleep -Seconds 1\r\n"
+        f"& robocopy '{ps(stage)}' '{ps(dest)}' /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null\r\n"
+        "if ($LASTEXITCODE -ge 8) { exit 1 }\r\n"
+        f"Start-Process -FilePath '{ps(os.path.join(dest, 'PrankBox.exe'))}'\r\n"
+        f"Remove-Item -LiteralPath '{ps(stage)}' -Recurse -Force -ErrorAction SilentlyContinue\r\n"
+    )
+    with open(script, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+    subprocess.Popen(
+        ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", script],
+        cwd=maj, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+
+def _download(url, dest, on_status):
+    request = urllib.request.Request(url, headers={"User-Agent": "PrankBox"})
+    with urllib.request.urlopen(request, timeout=120) as response:
+        total = int(response.headers.get("Content-Length") or 0)
+        got = 0
+        with open(dest, "wb") as f:
+            while True:
+                chunk = response.read(256 * 1024)
+                if not chunk:
+                    break
+                f.write(chunk)
+                got += len(chunk)
+                if total and on_status is not None:
+                    on_status(f"Téléchargement de PrankBox… {got * 100 // total} %")
+
+
+def apply_windows(plan, frozen, script_dir, on_status=None):
+    """Installe et lance le .exe. Renvoie True si ce programme doit se fermer."""
+    dest = _install_dir(frozen, script_dir)
+    if not frozen and _stamp_ok(dest, plan["sha256"]):
+        _migrate_config(script_dir)
+        _launch(os.path.join(dest, "PrankBox.exe"))
+        _remove_python(script_dir)
+        return True
+
+    if on_status is not None:
+        on_status("Téléchargement de PrankBox…")
+    folder = os.path.join(_appdata(), "maj")
+    os.makedirs(folder, exist_ok=True)
+    zip_path = os.path.join(folder, "PrankBox-windows.zip")
+    try:
+        _download(plan["url"], zip_path, on_status)
+        with open(zip_path, "rb") as f:
+            digest = hashlib.sha256(f.read()).hexdigest()
+        if digest != plan["sha256"]:
+            if on_status is not None:
+                on_status("Mise à jour refusée : le programme ne correspond pas à la signature.")
+            return False
+        if on_status is not None:
+            on_status("Installation de PrankBox…")
+        if frozen:
+            stage = os.path.join(folder, "next")
+            if os.path.isdir(stage):
+                shutil.rmtree(stage)
+            _extract(zip_path, stage)
+            with open(os.path.join(stage, ".prankbox_release"), "w", encoding="utf-8") as f:
+                f.write(plan["sha256"])
+            _schedule_replace(stage, dest, os.getpid())
+            return True
+        _extract(zip_path, dest)
+        with open(os.path.join(dest, ".prankbox_release"), "w", encoding="utf-8") as f:
+            f.write(plan["sha256"])
+        _migrate_config(script_dir)
+        _launch(os.path.join(dest, "PrankBox.exe"))
+        _remove_python(script_dir)
+        return True
+    except (OSError, ValueError, zipfile.BadZipFile) as exc:
+        if on_status is not None:
+            on_status(f"Mise à jour impossible ({exc}).")
+        return False
+    finally:
+        if os.path.isfile(zip_path):
+            try:
+                os.remove(zip_path)
+            except OSError:
+                pass

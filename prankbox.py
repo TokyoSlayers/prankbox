@@ -6,8 +6,9 @@ On ne partage que le code : l'adresse du PC n'est jamais affichée ni copiée.
 Les messages sont chiffrés avec le code du salon.
 Deux versions différentes ne peuvent pas rester dans le même salon.
 
-Usage : python prankbox.py (se met à jour tout seul depuis GitHub au lancement)
-Arrêt d'urgence des effets reçus : Ctrl+Alt+Shift+X
+Usage : python prankbox.py
+L'ancienne version télécharge toute seule le programme Windows, puis s'efface.
+Le .exe se met ensuite à jour tout seul. Arrêt d'urgence : Ctrl+Alt+Shift+X
 """
 
 import hashlib
@@ -23,6 +24,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import tkinter as tk
 import urllib.parse
 import urllib.request
@@ -31,7 +33,16 @@ import xml.etree.ElementTree as ET
 import effects
 import updater
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+def _user_dir():
+    """Réglages à côté du script, ou dans AppData quand on lance le .exe."""
+    if getattr(sys, "frozen", False):
+        path = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "PrankBox")
+        os.makedirs(path, exist_ok=True)
+        return path
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+HERE = _user_dir()
 DIRECTORY = "https://ntfy.sh"  # annuaire seulement : une adresse chiffrée, jamais les farces
 CONFIG_PATH = os.path.join(HERE, "prankbox_config.json")
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # sans 0/O ni 1/I/L pour éviter les confusions
@@ -97,6 +108,7 @@ RANDOM_POOL = [cmd for _, cmd in
 HOST_PORT = 47777
 # À augmenter quand le protocole change. Le salon refuse toute autre valeur.
 PROTOCOL = 4
+APP_RELEASE = 5  # numéro du .exe, écrit par tools/publier.py avant de le construire
 MAX_FRAME = 4_000_000
 ROLE_LABEL = {"hote": "hôte", "chef": "chef", "membre": "membre"}
 PAGES = [
@@ -1741,15 +1753,70 @@ class PrankBoxApp:
         self.root.after(50, self._poll)
 
 
+def _windows_status():
+    """Affiche une petite fenêtre seulement pendant le téléchargement du .exe."""
+    box = {"root": None, "label": None}
+
+    def status(text):
+        if box["root"] is None:
+            root = tk.Tk()
+            root.title("PrankBox")
+            root.configure(bg=BG)
+            root.resizable(False, False)
+            label = tk.Label(root, text=text, bg=BG, fg=TEXT, font=("Segoe UI", 12), padx=28, pady=32)
+            label.pack()
+            root.update_idletasks()
+            width, height = root.winfo_width(), root.winfo_height()
+            root.geometry(f"+{(root.winfo_screenwidth() - width) // 2}+{(root.winfo_screenheight() - height) // 2}")
+            box["root"], box["label"] = root, label
+        else:
+            box["label"].configure(text=text)
+        box["root"].update()
+
+    def close(hold_ms=0):
+        root = box["root"]
+        if root is None:
+            return
+        box["root"] = None
+        if hold_ms:
+            root.after(hold_ms, root.destroy)
+            root.mainloop()
+        else:
+            root.destroy()
+
+    return status, close
+
+
 def main():
-    if os.environ.get("PRANKBOX_NO_UPDATE") != "1" and updater.check():
+    frozen = getattr(sys, "frozen", False)
+    if not frozen and os.environ.get("PRANKBOX_NO_UPDATE") != "1" and updater.check():
         # Relance avec les nouveaux fichiers ; la variable évite une boucle si GitHub se contredit.
+        # Le .exe s'installe au tour suivant, même avec cette variable : l'ancien programme ne la connaît pas.
         env = {**os.environ, "PRANKBOX_NO_UPDATE": "1"}
         subprocess.Popen([sys.executable, os.path.abspath(__file__), *sys.argv[1:]], env=env)
         return
-    root = tk.Tk()
-    PrankBoxApp(root)
-    root.mainloop()
+    # PRANKBOX_SOURCE=1 garde le programme Python, pour travailler dessus.
+    if os.environ.get("PRANKBOX_SOURCE") != "1":
+        script_dir = os.path.dirname(sys.executable if frozen else os.path.abspath(__file__))
+        plan = updater.windows_plan(frozen, APP_RELEASE)
+        if plan is not None:
+            status, close = _windows_status()
+            installed = False
+            try:
+                installed = bool(updater.apply_windows(plan, frozen, script_dir, status))
+            finally:
+                close(0 if installed else 4000)
+            if installed:
+                return
+    try:
+        root = tk.Tk()
+        PrankBoxApp(root)
+        root.mainloop()
+    except Exception:
+        if frozen:
+            with open(os.path.join(_user_dir(), "erreur.log"), "w", encoding="utf-8") as f:
+                traceback.print_exc(file=f)
+        raise
 
 
 if __name__ == "__main__":

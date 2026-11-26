@@ -6,42 +6,23 @@ Les farces sont pour des amis qui sont d'accord. La fenêtre reste visible, chac
 
 ![Le salon, avec la barre latérale](docs/screenshots/salon.png)
 
-## Installer Python
+## Déjà l'ancienne version (avec Python)
 
-PrankBox a besoin de Python, avec Tkinter (l'interface). Rien d'autre à installer : pas de `pip`.
+Relance-la comme d'habitude, avec `python prankbox.py`. Elle télécharge le programme Windows, l'ouvre, puis efface ses fichiers Python. La fois d'après, ouvre `PrankBox.exe` dans le même dossier.
 
-1. Ouvre [python.org/downloads/windows](https://www.python.org/downloads/windows/) et prends l'installateur **Windows installer (64-bit)** de Python 3.10 ou plus récent.
-2. Au premier écran, coche **Add python.exe to PATH**.
-3. Clique sur **Install Now**. Tcl/Tk, qui affiche la fenêtre, est inclus.
-
-Vérifie dans un terminal :
-
-```bat
-python --version
-```
-
-Si Windows répond que `python` est introuvable, utilise le lanceur à la place : `py --version`.
+Le pseudo et le salon sont conservés. Tout le monde doit garder la même version, affichée sous le titre : la mise à jour part toute seule au lancement.
 
 ## Installer PrankBox
 
-1. Sur cette page GitHub, clique sur **Code**, puis **Download ZIP**.
-2. Dézippe le dossier, par exemple dans `Téléchargements\prankbox`.
-3. Ouvre un terminal dans ce dossier. Dans l'explorateur : clique la barre d'adresse, tape `cmd`, puis Entrée.
-4. Lance :
+Python n'est plus nécessaire.
 
-```bat
-python prankbox.py
-```
-
-Si `python` n'est pas reconnu :
-
-```bat
-py prankbox.py
-```
+1. Ouvre les [versions publiées](https://github.com/TokyoSlayers/prankbox/releases) et télécharge **PrankBox-windows.zip**.
+2. Dézippe le dossier, par exemple dans `Téléchargements\PrankBox`.
+3. Lance **PrankBox.exe**. Il faut garder tout le dossier, pas seulement le `.exe`.
 
 Au lancement, PrankBox regarde GitHub et se met à jour tout seul. La mise à jour est signée : un fichier modifié sur le dépôt sans cette signature n'est pas installé.
 
-Si Windows demande d'autoriser Python à communiquer sur le réseau, accepte. Sinon tes potes ne pourront pas rejoindre le salon.
+Si Windows demande d'autoriser PrankBox à communiquer sur le réseau, accepte. Sinon tes potes ne pourront pas rejoindre le salon.
 
 ## Créer un salon
 
@@ -98,7 +79,6 @@ Sur le PC qui reçoit une farce, le raccourci **Ctrl+Alt+Maj+X** arrête les eff
 
 | Ce que tu vois | Quoi faire |
 | --- | --- |
-| `python` n'est pas reconnu | Relance l'installateur Python et coche **Add python.exe to PATH**, ou lance `py prankbox.py`. |
-| `No module named tkinter` | Réinstalle Python depuis python.org avec **Install Now**. L'application du Microsoft Store omet parfois Tkinter. |
-| Hôte introuvable | L'hôte doit avoir PrankBox ouvert, avec le même code. Autorise Python dans le pare-feu si Windows l'a demandé. |
+| L'ancienne version ne propose pas le .exe | Relance `python prankbox.py` une fois, avec Internet. Le téléchargement s'affiche tout seul. |
+| Hôte introuvable | L'hôte doit avoir PrankBox ouvert, avec le même code. Autorise PrankBox dans le pare-feu si Windows l'a demandé. |
 | La fenêtre est trop étroite | Sous 860 pixels de large, la barre passe en haut sous forme d'icônes. Élargis la fenêtre pour retrouver les noms des pages. |
