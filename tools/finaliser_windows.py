@@ -24,15 +24,23 @@ import updater  # noqa: E402
 
 def _app_release():
     with open(os.path.join(ROOT, "prankbox.py"), encoding="utf-8") as handle:
-        match = re.search(r"(?m)^APP_RELEASE = (\d+)", handle.read())
+        text = handle.read()
+    match = re.search(r"(?m)^APP_RELEASE = (\d+)", text)
     if not match or int(match.group(1)) <= 0:
         sys.exit("APP_RELEASE introuvable.")
     return int(match.group(1))
 
 
+def _app_label():
+    with open(os.path.join(ROOT, "prankbox.py"), encoding="utf-8") as handle:
+        match = re.search(r'(?m)^APP_VERSION = "([^"]+)"', handle.read())
+    return match.group(1) if match else str(_app_release())
+
+
 def main():
     version = _app_release()
-    url = f"https://github.com/{updater.REPO}/releases/download/v{version}/PrankBox-windows.zip"
+    label = _app_label()
+    url = f"https://github.com/{updater.REPO}/releases/download/v{label}/PrankBox-windows.zip"
     path = os.path.join(ROOT, "dist", "release", "PrankBox-windows.zip")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     try:
@@ -48,12 +56,12 @@ def main():
     digest = hashlib.sha256(data).hexdigest()
     current = os.path.join(ROOT, "windows.json")
     if os.path.isfile(current) and digest in open(current, encoding="utf-8").read():
-        print(f"L'empreinte de la version {version} est déjà publiée.")
+        print(f"L'empreinte de la version {label} est déjà publiée.")
         return
     secret = publier.load_secret()
-    publier._write_windows(version, digest)
-    publier.publish_tree(secret, f"Empreinte du programme Windows signé {version}")
-    print(f"Empreinte publiée pour v{version}. Les autres téléchargeront le .exe signé.")
+    publier._write_windows(version, digest, label)
+    publier.publish_tree(secret, f"Empreinte du programme Windows signé {label}", label)
+    print(f"Empreinte publiée pour v{label}. Les autres téléchargeront le .exe signé.")
 
 
 if __name__ == "__main__":

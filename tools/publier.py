@@ -28,22 +28,37 @@ def git(*args):
     return subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout
 
 
+def _public_label(text):
+    """9 devient 9.1, puis 9.2. Le numéro interne, lui, reste un entier."""
+    match = re.search(r'(?m)^APP_VERSION = "(\d+(?:\.\d+)*)"', text)
+    if not match:
+        sys.exit("APP_VERSION introuvable dans prankbox.py : publication annulée.")
+    label = match.group(1)
+    if "." not in label:
+        return f"{label}.1"
+    head, patch = label.rsplit(".", 1)
+    return f"{head}.{int(patch) + 1}"
+
+
 def _set_release(version):
     path = os.path.join(ROOT, "prankbox.py")
     with open(path, encoding="utf-8", newline="") as f:
         text = f.read()
+    label = _public_label(text)
     new, count = re.subn(r"(?m)^APP_RELEASE = \d+", f"APP_RELEASE = {version}", text, count=1)
-    if count != 1:
-        sys.exit("APP_RELEASE introuvable dans prankbox.py : publication annulée.")
+    new, count_label = re.subn(r'(?m)^APP_VERSION = "[^"]+"', f'APP_VERSION = "{label}"', new, count=1)
+    if count != 1 or count_label != 1:
+        sys.exit("APP_RELEASE ou APP_VERSION introuvable dans prankbox.py : publication annulée.")
     new = new.replace("\r\n", "\n").replace("\n", "\r\n")
     with open(path, "w", encoding="utf-8", newline="") as f:
         f.write(new)
+    return label
 
 
-def _write_windows(version, digest):
+def _write_windows(version, digest, tag=None):
     info = {
         "sha256": digest,
-        "url": f"https://github.com/{updater.REPO}/releases/download/v{version}/PrankBox-windows.zip",
+        "url": f"https://github.com/{updater.REPO}/releases/download/v{tag or version}/PrankBox-windows.zip",
         "version": version,
     }
     with open(os.path.join(ROOT, "windows.json"), "wb") as f:
@@ -61,7 +76,7 @@ def load_secret():
     return secret
 
 
-def publish_tree(secret, message):
+def publish_tree(secret, message, label=None):
     """Signe le manifeste et pousse. Le .exe signé est ajouté ensuite par GitHub Actions."""
     git("add", "-A")
     files = [f for f in git("ls-files", "-z").split("\0") if f and f not in updater.PROTECTED]
@@ -79,7 +94,7 @@ def publish_tree(secret, message):
         f.write(signature.sign(secret, data).hex())
 
     git("add", "-A")
-    git("commit", "-q", "-m", f"v{manifest['version']} : {message}")
+    git("commit", "-q", "-m", f"v{label or manifest['version']} : {message}")
     git("push", "-q", "origin", updater.BRANCH)
     return manifest
 
@@ -105,27 +120,27 @@ def main():
     subprocess.run(["gh", "auth", "status"], check=True)
 
     version = updater.local_version() + 1
-    _set_release(version)
+    label = _set_release(version)
     if signpath_configured():
-        manifest = publish_tree(secret, message)
+        manifest = publish_tree(secret, message, label)
         subprocess.run(
-            ["gh", "release", "create", f"v{version}",
-             "--repo", updater.REPO, "--title", f"PrankBox {version}", "--notes", message],
+            ["gh", "release", "create", f"v{label}",
+             "--repo", updater.REPO, "--title", f"PrankBox {label}", "--notes", message],
             check=True,
         )
-        print(f"Version {manifest['version']} publiée. GitHub va faire signer PrankBox.exe.")
+        print(f"Version {label} publiée. GitHub va faire signer PrankBox.exe.")
         print("Quand l'action Signer Windows est verte : python tools/finaliser_windows.py")
         return
 
     zip_path, digest = build_windows.package()
-    _write_windows(version, digest)
+    _write_windows(version, digest, label)
     subprocess.run(
-        ["gh", "release", "create", f"v{version}", zip_path,
-         "--repo", updater.REPO, "--title", f"PrankBox {version}", "--notes", message],
+        ["gh", "release", "create", f"v{label}", zip_path,
+         "--repo", updater.REPO, "--title", f"PrankBox {label}", "--notes", message],
         check=True,
     )
-    manifest = publish_tree(secret, message)
-    print(f"Version {manifest['version']} publiée, avec le programme Windows.")
+    publish_tree(secret, message, label)
+    print(f"Version {label} publiée, avec le programme Windows.")
     print("SignPath n'est pas encore branché : l'exe part quand même, l'avertissement Windows reste.")
     print("Dès que les accès SignPath sont sur le dépôt, les prochaines versions repasseront par la signature.")
 

@@ -108,7 +108,8 @@ RANDOM_POOL = [cmd for _, cmd in
 HOST_PORT = 47777
 # À augmenter quand le protocole change. Le salon refuse toute autre valeur.
 PROTOCOL = 4
-APP_RELEASE = 9  # numéro du .exe, écrit par tools/publier.py avant de le construire
+APP_RELEASE = 10  # numéro interne, comparé par les mises à jour déjà installées
+APP_VERSION = "9.1"  # numéro affiché. Chaque publication le passe à 9.1, puis 9.2…
 MAX_FRAME = 4_000_000
 ROLE_LABEL = {"hote": "hôte", "chef": "chef", "membre": "membre"}
 PAGES = [
@@ -1357,7 +1358,7 @@ class PrankBoxApp:
                  font=("Segoe UI Black", 18)).pack(anchor="w")
         tk.Label(brand, text="Trollez-vous entre potes", bg=SIDEBAR, fg=MUTED,
                  font=("Segoe UI", 9)).pack(anchor="w")
-        tk.Label(brand, text=f"Version {PROTOCOL}", bg=SIDEBAR, fg=MUTED,
+        tk.Label(brand, text=f"Version {APP_VERSION}", bg=SIDEBAR, fg=MUTED,
                  font=("Segoe UI", 8)).pack(anchor="w")
         self.nav_box = tk.Frame(self.sidebar, bg=SIDEBAR)
         self.nav_box.pack(fill="both", expand=True, padx=10, pady=8)
