@@ -108,8 +108,8 @@ RANDOM_POOL = [cmd for _, cmd in
 HOST_PORT = 47777
 # À augmenter quand le protocole change. Le salon refuse toute autre valeur.
 PROTOCOL = 4
-APP_RELEASE = 10  # numéro interne, comparé par les mises à jour déjà installées
-APP_VERSION = "9.1"  # numéro affiché. Chaque publication le passe à 9.1, puis 9.2…
+APP_RELEASE = 11  # numéro interne, comparé par les mises à jour déjà installées
+APP_VERSION = "9.2"  # numéro affiché. Chaque publication le passe à 9.1, puis 9.2…
 MAX_FRAME = 4_000_000
 ROLE_LABEL = {"hote": "hôte", "chef": "chef", "membre": "membre"}
 PAGES = [

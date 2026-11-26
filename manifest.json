@@ -16,14 +16,14 @@
   "images/screamer.png": "6ce1f6ed0b8e43a5fc8047d51a753fbf85bf9b3ed3b017adde6c3faacde52b11",
   "images/screamer2.png": "434bf1daf31df226c818ad9a046ab6840bc818be8027662cd20f2f73a874acb3",
   "images/screamer3.png": "4153b98264eaac9e31ba0dbc10b372eed8d1e49e4aa6f5a63d5d16109f128f4c",
-  "prankbox.py": "a881ae57fb7f4e6cbac5cf3e60c07e6e3f7991d58a72549c484dbcfa3f532564",
+  "prankbox.py": "251b598d1cda19c80d794eebe5d8f2b915b0109ecb9ce1b861dafbe692b9f571",
   "signature.py": "7a74b7e513073e11fe3b35bb97f1152bbde93ea6a0a060a7aee27581ba58a548",
-  "tools/build_windows.py": "3761b449cdfb84deb7f828da5e5414521f9ecbdc8d8c601525635e7af7225582",
+  "tools/build_windows.py": "5e84b19e28fe8707d7a4a56670ee007dc51d52a0c7e1b93779f533da518b6539",
   "tools/finaliser_windows.py": "0205623b6d3bfe0fa5e1b0a564200f3a37034dfd5535c3c00f462256a66f4653",
   "tools/publier.py": "6c1b05f469d3f6aab25840911f5fd0884555d0c887b042ac203eb0b423fc0b0b",
   "tools/render_poro.py": "2d14167970ffa437589cf887b57e4b3d020d46559a6d297948f3aa02dac159c1",
   "updater.py": "5d317ad2012cb59282d4b1365263cde76d155eada76d84f22e1a755bf73168d4",
-  "windows.json": "9f884eb2141992196f055700954c4e1cd30b2363d60d6a18418734b479d2458f"
+  "windows.json": "15776c2739432e13973194f16cfbb7b4d1f4ac9dfc7e4d647deb4de8db8bd2ad"
  },
- "version": 10
+ "version": 11
 }
