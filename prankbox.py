@@ -1245,6 +1245,10 @@ class PrankBoxApp:
     def on_volume(self, value):
         self.effects.set_volume(int(float(value)))
 
+    def open_addons(self):
+        """Ouvre le dossier où l'on dépose pieds, poro, screamers et sons Discord."""
+        os.startfile(effects.addons_dir())
+
     def test_volume(self):
         self.save_config()
         effects.play_sound("discord_ping")
@@ -1624,6 +1628,9 @@ class PrankBoxApp:
         make_button(card, "STOP — annuler les effets chez tout le monde", self.stop_all,
                     bg=RED, hover=RED_HOVER, fg=TEXT).grid(
             row=15, column=0, columnspan=6, sticky="ew", padx=4, pady=(8, 0))
+        make_button(card, "Ajouter des images et des sons", self.open_addons,
+                    bg=DARK_BTN, hover=DARK_BTN_HOVER, fg=TEXT, size=9).grid(
+            row=16, column=0, columnspan=6, sticky="ew", padx=4, pady=(8, 0))
 
     # ---------- actions
 

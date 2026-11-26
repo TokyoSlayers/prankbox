@@ -28,10 +28,68 @@ import winsound
 from ctypes import wintypes
 from dataclasses import dataclass
 
-# Dans le .exe, images et sons sont à côté du programme empaqueté, pas du script.
+# Dans le .exe, images et sons livrés avec le programme sont dans l'archive.
+# Ceux que l'on ajoute soi-même sont cherchés avant, et remplacent les fichiers du même nom.
 HERE = sys._MEIPASS if getattr(sys, "frozen", False) else os.path.dirname(os.path.abspath(__file__))
 SOUNDS_DIR = os.path.join(HERE, "sounds")
 IMAGES_DIR = os.path.join(HERE, "images")
+
+
+def addons_dir():
+    """Dossier où déposer ses propres images et sons. Il est créé s'il manque."""
+    path = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "PrankBox", "ajouts")
+    os.makedirs(os.path.join(path, "images", "poro"), exist_ok=True)
+    os.makedirs(os.path.join(path, "images", "poro_oiia"), exist_ok=True)
+    os.makedirs(os.path.join(path, "sounds"), exist_ok=True)
+    note = os.path.join(path, "LISEZMOI.txt")
+    if not os.path.isfile(note):
+        with open(note, "w", encoding="utf-8", newline="\r\n") as handle:
+            handle.write(
+                "Fichiers personnels de PrankBox\r\n"
+                "\r\n"
+                "Un fichier ici remplace celui du programme, s'il a le même nom.\r\n"
+                "Relance PrankBox après avoir ajouté des images.\r\n"
+                "\r\n"
+                "images\\pieds1.png   pieds2.png   pieds3.png\r\n"
+                "images\\screamer.png   screamer2.png   …\r\n"
+                "images\\poro\\          les images du poro qui saute (.png)\r\n"
+                "images\\poro_oiia\\debout.png et toupie_00.png, toupie_01.png…\r\n"
+                "\r\n"
+                "sounds\\discord_join.wav\r\n"
+                "sounds\\discord_leave.wav\r\n"
+                "sounds\\discord_ping.wav\r\n"
+                "sounds\\discord_appel.wav\r\n"
+                "sounds\\oiia.wav\r\n"
+                "sounds\\poro.wav\r\n"
+                "sounds\\screamer.wav\r\n"
+            )
+    return path
+
+
+def _media_bases():
+    bases = [addons_dir()]
+    if getattr(sys, "frozen", False):
+        bases.append(os.path.dirname(sys.executable))
+    bases.append(HERE)
+    return bases
+
+
+def find_file(kind, name):
+    """Premier fichier trouvé : dossier personnel, puis à côté du .exe, puis dans le programme."""
+    for base in _media_bases():
+        path = os.path.join(base, kind, name)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def find_dir(kind, folder):
+    """Premier dossier qui contient au moins une image png."""
+    for base in _media_bases():
+        path = os.path.join(base, kind, folder)
+        if os.path.isdir(path) and any(name.lower().endswith(".png") for name in os.listdir(path)):
+            return path
+    return os.path.join(HERE, kind, folder)
 GAME_BG = "#0f1923"
 GAME_RED = "#ff4655"
 GAME_WHITE = "#ece8e1"
@@ -503,11 +561,11 @@ SOUNDS = {
 
 
 def play_sound(name):
-    """Joue sounds/<name>.wav s'il existe, sinon un son synthétisé."""
-    custom = os.path.join(SOUNDS_DIR, name + ".wav")
+    """Joue un .wav personnel ou livré avec le programme, sinon un son synthétisé."""
+    custom = find_file("sounds", name + ".wav")
 
     def worker():
-        if os.path.exists(custom):
+        if custom and os.path.exists(custom):
             winsound.PlaySound(custom, winsound.SND_FILENAME)
         else:
             winsound.PlaySound(_to_wav(SOUNDS[name]()), winsound.SND_MEMORY)
@@ -846,8 +904,8 @@ class Effects:
         frame()
 
     def load_image(self, name, max_h):
-        path = os.path.join(IMAGES_DIR, name + ".png")
-        if not os.path.exists(path):
+        path = find_file("images", name + ".png")
+        if not path:
             self.on_status(f"Image manquante : images/{name}.png")
             return None
         img = tk.PhotoImage(file=path)
@@ -1117,8 +1175,16 @@ class Effects:
     # ---------- trucs marrants
 
     def fx_screamer(self, a):
-        faces = [f[:-4] for f in os.listdir(IMAGES_DIR) if f.startswith("screamer") and f.endswith(".png")] \
-            if os.path.isdir(IMAGES_DIR) else []
+        faces = []
+        seen = set()
+        for base in _media_bases():
+            folder = os.path.join(base, "images")
+            if not os.path.isdir(folder):
+                continue
+            for filename in os.listdir(folder):
+                if filename.startswith("screamer") and filename.lower().endswith(".png") and filename not in seen:
+                    seen.add(filename)
+                    faces.append(filename[:-4])
         ov = self.fullscreen("black", hide_cursor=True)
         img = self.load_image(random.choice(faces or ["screamer"]), ov.ph)
         if img is None:
@@ -1439,8 +1505,8 @@ class Effects:
         cache = self.__dict__.setdefault("_poro_cache", {})
         if (folder, screen_h) in cache:
             return cache[folder, screen_h]
-        path = os.path.join(IMAGES_DIR, folder)
-        names = sorted(f for f in os.listdir(path) if f.endswith(".png")) if os.path.isdir(path) else []
+        path = find_dir("images", folder)
+        names = sorted(f for f in os.listdir(path) if f.lower().endswith(".png")) if os.path.isdir(path) else []
         if not names:
             self.on_status(f"Images manquantes : images/{folder}/")
             return {}
